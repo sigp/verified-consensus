@@ -2,9 +2,6 @@ theory Types
   imports Main Unsigned
 begin
 
-datatype Slot = Slot u64
-datatype Epoch = Epoch u64
-
 datatype Hash256 = Hash256 "u8 list"
 
 (* FIXME: enforce length at type level? *)

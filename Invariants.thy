@@ -26,18 +26,6 @@ definition valid_vector :: "('a \<Rightarrow> bool) \<Rightarrow> u64 \<Rightarr
     u64_to_nat (vector_len v) = u64_to_nat n \<and>
     list_all pred (vector_inner v)"
 
-primrec slot_to_u64 :: "Slot \<Rightarrow> u64" where
-  "slot_to_u64 (Slot n) = n"
-
-definition valid_slot :: "Slot \<Rightarrow> bool" where
-  "valid_slot s \<equiv> valid_u64 (slot_to_u64 s)"
-
-primrec epoch_to_u64 :: "Epoch \<Rightarrow> u64" where
-  "epoch_to_u64 (Epoch n) = n"
-
-definition valid_epoch :: "Epoch \<Rightarrow> bool" where
-  "valid_epoch e \<equiv> valid_u64 (epoch_to_u64 e)"
-
 definition valid_hash256 :: "Hash256 \<Rightarrow> bool" where
   "valid_hash256 h \<equiv> case h of (Hash256 bytes) \<Rightarrow> length bytes = 32"
 

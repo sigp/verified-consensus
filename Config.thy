@@ -2,6 +2,9 @@ theory Config
   imports Main Types
 begin
 
+definition GENESIS_EPOCH :: Epoch where
+  "GENESIS_EPOCH = Epoch (u64 0)"
+
 record Config =
   SLOTS_PER_HISTORICAL_ROOT :: u64
   HISTORICAL_ROOTS_LIMIT :: u64
