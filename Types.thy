@@ -1,10 +1,6 @@
 theory Types
-  imports Main
+  imports Main Unsigned
 begin
-
-(* FIXME: implement overflow checks, etc *)
-datatype u8 = u8 nat
-datatype u64 = u64 nat
 
 datatype Slot = Slot u64
 datatype Epoch = Epoch u64
@@ -17,7 +13,7 @@ datatype 'a List = List "'a list"
 
 datatype Bitvector = Bitvector "bool list"
 
-datatype PublicKey = Pubkey "u8 list"
+datatype PublicKey = PublicKey "u8 list"
 
 datatype Version = Version "u8 list"
 
@@ -41,6 +37,7 @@ record Eth1Data =
 record Validator =
   pubkey :: PublicKey
   withdrawal_credentials :: Hash256
+  effective_balance :: u64
   slashed :: bool
   activation_eligibility_epoch :: Epoch
   activation_epoch :: Epoch
@@ -73,9 +70,9 @@ record BeaconState =
   eth1_data_votes :: "Eth1Data List"
   eth1_deposit_index :: u64
   validators :: "Validator List"
-  balances :: "u64 list"
+  balances :: "u64 List"
   randao_mixes :: "Hash256 Vector"
-  slashings :: "Hash256 Vector"
+  slashings :: "u64 Vector"
   previous_epoch_participation :: "ParticipationFlags List"
   current_epoch_participation :: "ParticipationFlags List"
   justification_bits :: Bitvector
