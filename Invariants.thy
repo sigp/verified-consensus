@@ -71,6 +71,10 @@ definition valid_bitvector :: "u64 \<Rightarrow> Bitvector \<Rightarrow> bool" w
 definition valid_checkpoint :: "Checkpoint \<Rightarrow> bool" where
   "valid_checkpoint c \<equiv> valid_epoch (Checkpoint.epoch c) \<and> valid_hash256 (Checkpoint.root c)"
 
+definition valid_participation_flags :: "ParticipationFlags \<Rightarrow> bool" where
+  "valid_participation_flags flags \<equiv>
+    case flags of ParticipationFlags bools \<Rightarrow> length bools = 3"
+
 definition valid_sync_committee :: "Config \<Rightarrow> SyncCommittee \<Rightarrow> bool" where
   "valid_sync_committee c sync_committee \<equiv>
     valid_vector valid_public_key (SYNC_COMMITTEE_SIZE c) (pubkeys sync_committee) \<and>
@@ -93,6 +97,10 @@ definition valid_beacon_state :: "Config \<Rightarrow> BeaconState \<Rightarrow>
     valid_list valid_u64 (VALIDATOR_REGISTRY_LIMIT c) (balances state) \<and>
     valid_vector valid_hash256 (EPOCHS_PER_HISTORICAL_VECTOR c) (randao_mixes state) \<and>
     valid_vector valid_u64 (EPOCHS_PER_SLASHINGS_VECTOR c) (slashings state) \<and>
+    valid_list valid_participation_flags (VALIDATOR_REGISTRY_LIMIT c)
+               (previous_epoch_participation state) \<and>
+    valid_list valid_participation_flags (VALIDATOR_REGISTRY_LIMIT c)
+               (current_epoch_participation state) \<and>
     valid_bitvector (JUSTIFICATION_BITS_LENGTH c) (justification_bits state) \<and>
     valid_checkpoint (previous_justified_checkpoint state) \<and>
     valid_checkpoint (current_justified_checkpoint state) \<and>

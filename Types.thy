@@ -41,10 +41,7 @@ record Validator =
   exit_epoch :: Epoch
   withdrawable_epoch :: Epoch
 
-record ParticipationFlags =
-  head_flag :: bool
-  target_flag :: bool
-  source_flag :: bool
+datatype ParticipationFlags = ParticipationFlags "bool list"
 
 record Checkpoint =
   epoch :: Epoch

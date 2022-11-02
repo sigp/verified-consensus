@@ -5,6 +5,15 @@ begin
 definition GENESIS_EPOCH :: Epoch where
   "GENESIS_EPOCH = Epoch (u64 0)"
 
+definition TIMELY_SOURCE_FLAG_INDEX :: nat where
+  "TIMELY_SOURCE_FLAG_INDEX = 0"
+
+definition TIMELY_TARGET_FLAG_INDEX :: nat where
+  "TIMELY_TARGET_FLAG_INDEX = 1"
+
+definition TIMELY_HEAD_FLAG_INDEX :: nat where
+  "TIMELY_HEAD_FLAG_INDEX = 2"
+
 record Config =
   SLOTS_PER_HISTORICAL_ROOT :: u64
   HISTORICAL_ROOTS_LIMIT :: u64
