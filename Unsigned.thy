@@ -25,6 +25,60 @@ definition valid_slot :: "Slot \<Rightarrow> bool" where
 definition valid_epoch :: "Epoch \<Rightarrow> bool" where
   "valid_epoch e \<equiv> valid_u64 (epoch_to_u64 e)"
 
+lemma u64_to_nat_bij: "(u64_to_nat x = u64_to_nat y) = (x = y)"
+  by (case_tac x; case_tac y; auto)
+
+lemma slot_to_u64_bij: "(slot_to_u64 x = slot_to_u64 y) = (x = y)"
+  by (case_tac x; case_tac y; auto)
+
+lemma epoch_to_u64_bij: "(epoch_to_u64 x = epoch_to_u64 y) = (x = y)"
+  by (case_tac x; case_tac y; auto)
+
+(* Linear order instance for u64 *)
+instantiation u64 :: linorder
+begin
+
+definition less_eq_u64 :: "u64 \<Rightarrow> u64 \<Rightarrow> bool" where
+  "less_eq_u64 x y \<equiv> u64_to_nat x \<le> u64_to_nat y"
+
+definition less_u64 :: "u64 \<Rightarrow> u64 \<Rightarrow> bool" where
+  "less_u64 x y \<equiv> u64_to_nat x < u64_to_nat y"
+
+instance
+  by (intro_classes; auto simp: less_eq_u64_def less_u64_def u64_to_nat_bij)
+end
+
+(* Linear order instance for Slot *)
+instantiation Slot :: linorder
+begin
+
+definition less_eq_Slot :: "Slot \<Rightarrow> Slot \<Rightarrow> bool" where
+  "less_eq_Slot x y \<equiv> slot_to_u64 x \<le> slot_to_u64 y"
+
+definition less_Slot :: "Slot \<Rightarrow> Slot \<Rightarrow> bool" where
+  "less_Slot x y \<equiv> slot_to_u64 x < slot_to_u64 y"
+
+instance
+  by (intro_classes;
+      auto intro: order_neq_le_trans simp: less_eq_Slot_def less_Slot_def slot_to_u64_bij)
+end
+
+(* Linear order instance for Epoch *)
+instantiation Epoch :: linorder
+begin
+
+definition less_eq_Epoch :: "Epoch \<Rightarrow> Epoch \<Rightarrow> bool" where
+  "less_eq_Epoch x y \<equiv> epoch_to_u64 x \<le> epoch_to_u64 y"
+
+definition less_Epoch :: "Epoch \<Rightarrow> Epoch \<Rightarrow> bool" where
+  "less_Epoch x y \<equiv> epoch_to_u64 x < epoch_to_u64 y"
+
+instance
+  by (intro_classes;
+      auto intro: order_neq_le_trans simp: less_eq_Epoch_def less_Epoch_def epoch_to_u64_bij)
+end
+
+(* Unsigned arithmetic operators with overflow checks *)
 consts
   unsigned_add :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
   unsigned_sub :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
@@ -135,5 +189,8 @@ lemma u64_div_zero: "n \\ u64 0 = None"
 
 lemma slot_div_zero: "n \\ Slot (u64 0) = None"
   by (clarsimp simp: slot_simps u64_simps unsigned_simps)
+
+lemma epoch_leq: "Epoch (u64 n) \<le> (Epoch (u64 (n + 1)))"
+  by (clarsimp simp: less_eq_Epoch_def less_eq_u64_def)
 
 end
