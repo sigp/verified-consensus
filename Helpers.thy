@@ -26,7 +26,6 @@ definition has_flag :: "ParticipationFlags \<Rightarrow> nat \<Rightarrow> bool"
   "has_flag flags flag_index \<equiv>
     case flags of ParticipationFlags bools \<Rightarrow> bools ! flag_index"
 
-(* FIXME(sproul): cleaner indexing without `list_inner` *)
 definition get_unslashed_participating_indices ::
    "Config \<Rightarrow> BeaconState \<Rightarrow> nat \<Rightarrow> Epoch \<Rightarrow> (u64 set) option"
 where
@@ -40,14 +39,23 @@ where
       previous_epoch_participation state);
     let active_validator_indices = get_active_validator_indices state e;
     let participating_indices = [
-      i.
-      i \<leftarrow> active_validator_indices,
-      has_flag (list_inner epoch_participation ! u64_to_nat i) flag_index
+      i. i \<leftarrow> active_validator_indices, has_flag (list_index epoch_participation i) flag_index
     ];
     Some (
       set (
-        filter (\<lambda>index. \<not> slashed (list_inner (validators state) ! u64_to_nat index))
+        filter (\<lambda>index. \<not> slashed (list_index (validators state) index))
                participating_indices))
   }"
+
+definition get_total_balance :: "Config \<Rightarrow> BeaconState \<Rightarrow> u64 set \<Rightarrow> u64 option" where
+  "get_total_balance c state indices \<equiv> do {
+    total \<leftarrow> safe_sum ((\<lambda>i. effective_balance (list_index (validators state) i)) ` indices);
+    Some (max (EFFECTIVE_BALANCE_INCREMENT c) total)
+  }"
+
+definition get_total_active_balance :: "Config \<Rightarrow> BeaconState \<Rightarrow> u64 option" where
+  "get_total_active_balance c state \<equiv>
+    get_total_balance c state
+                      (set (get_active_validator_indices state (get_current_epoch c state)))"
 
 end
