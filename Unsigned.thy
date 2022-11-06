@@ -84,12 +84,14 @@ consts
   unsigned_sub :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
   unsigned_mul :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
   unsigned_div :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
+  unsigned_mod :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
 
 notation
   unsigned_add (infixl ".+" 65) and
   unsigned_sub (infixl ".-" 65) and
   unsigned_mul (infixl ".*" 70) and
-  unsigned_div (infixl "\\" 70)
+  unsigned_div (infixl "\\" 70) and
+  unsigned_mod (infixl ".%" 75)
 
 definition check_bin_op_then ::
   "('a \<Rightarrow> 'b) \<Rightarrow>
@@ -131,6 +133,9 @@ definition u64_mul :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 option" where
 definition u64_div :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 option" where
   "u64_div \<equiv> check_bin_op u64_to_nat u64 (\<lambda>_ y. y \<noteq> u64 0) valid_u64 (div)"
 
+definition u64_mod :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 option" where
+  "u64_mod \<equiv> check_bin_op u64_to_nat u64 (\<lambda>_ y. y \<noteq> u64 0) valid_u64 (mod)"
+
 definition lift_slot_bin_op :: "(u64 \<Rightarrow> u64 \<Rightarrow> u64 option) \<Rightarrow> Slot \<Rightarrow> Slot \<Rightarrow> Slot option" where
   "lift_slot_bin_op \<equiv> check_bin_op_then slot_to_u64 Slot any_args valid_slot"
 
@@ -149,6 +154,9 @@ definition slot_mul :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot option" where
 definition slot_div :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot option" where
   "slot_div \<equiv> lift_slot_bin_op u64_div"
 
+definition slot_mod :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot option" where
+  "slot_mod \<equiv> lift_slot_bin_op u64_mod"
+
 definition epoch_add :: "Epoch \<Rightarrow> Epoch \<Rightarrow> Epoch option" where
   "epoch_add \<equiv> lift_epoch_bin_op u64_add"
 
@@ -161,17 +169,21 @@ definition epoch_mul :: "Epoch \<Rightarrow> Epoch \<Rightarrow> Epoch option" w
 definition epoch_div :: "Epoch \<Rightarrow> Epoch \<Rightarrow> Epoch option" where
   "epoch_div \<equiv> lift_epoch_bin_op u64_div"
 
+definition epoch_mod :: "Epoch \<Rightarrow> Epoch \<Rightarrow> Epoch option" where
+  "epoch_mod \<equiv> lift_epoch_bin_op u64_mod"
+
 adhoc_overloading
   unsigned_add u64_add slot_add epoch_add and
   unsigned_sub u64_sub slot_sub epoch_sub and
   unsigned_mul u64_mul slot_mul epoch_mul and
-  unsigned_div u64_div slot_div epoch_div
+  unsigned_div u64_div slot_div epoch_div and
+  unsigned_mod u64_mod slot_mod epoch_mod
 
-lemmas u64_simps = valid_u64_def u64_add_def u64_sub_def u64_mul_def u64_div_def
-lemmas slot_simps = valid_slot_def slot_add_def slot_sub_def slot_mul_def slot_div_def
+lemmas u64_simps = valid_u64_def u64_add_def u64_sub_def u64_mul_def u64_div_def u64_mod_def
+lemmas slot_simps = valid_slot_def slot_add_def slot_sub_def slot_mul_def slot_div_def slot_mod_def
                     lift_slot_bin_op_def
 lemmas epoch_simps = valid_epoch_def epoch_add_def epoch_sub_def epoch_mul_def epoch_div_def
-                     lift_epoch_bin_op_def
+                     epoch_mod_def lift_epoch_bin_op_def
 lemmas unsigned_simps = any_args_def check_bin_op_then_def check_bin_op_def
 
 (* Sanity check lemmas *)

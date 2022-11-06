@@ -11,11 +11,63 @@ where
                                         current_epoch_target_balance \<equiv> do {
     let previous_epoch = get_previous_epoch c state;
     let current_epoch = get_current_epoch c state;
-    let old_previous_justified_checkpoint = previous_justified_checkpoint state;
-    let old_current_justified_checkpoint = current_justified_checkpoint state;
+    let old_previous_justified_checkpoint = previous_justified_checkpoint_f state;
+    let old_current_justified_checkpoint = current_justified_checkpoint_f state;
 
-    let state' = state \<lparr> current_justified_checkpoint := old_current_justified_checkpoint \<rparr>;
-    None
+    let state = state \<lparr> current_justified_checkpoint_f := old_current_justified_checkpoint \<rparr>;
+    let shifted_justification_bits = shift_and_clear_bitvector c (justification_bits_f state);
+    let state = state \<lparr> justification_bits_f := shifted_justification_bits \<rparr>;
+    previous_epoch_target_x3 \<leftarrow> previous_epoch_target_balance .* u64 3;
+    current_epoch_target_x3 \<leftarrow> current_epoch_target_balance .* u64 3;
+    total_active_balance_x2 \<leftarrow> total_active_balance .* u64 2;
+    state \<leftarrow> if previous_epoch_target_x3 \<ge> total_active_balance_x2 then do {
+        let updated_justification_bits = bitvector_update (justification_bits_f state) 1 False;
+        block_root \<leftarrow> get_block_root c state previous_epoch;
+        Some (state \<lparr>
+          current_justified_checkpoint_f := \<lparr> epoch_f = previous_epoch, root_f = block_root \<rparr>,
+          justification_bits_f := updated_justification_bits
+        \<rparr>)
+      } else Some state;
+     state \<leftarrow> if current_epoch_target_x3 \<ge> total_active_balance_x2 then do {
+        let updated_justification_bits = bitvector_update (justification_bits_f state) 0 False;
+        block_root \<leftarrow> get_block_root c state current_epoch;
+        Some (state \<lparr>
+          current_justified_checkpoint_f := \<lparr> epoch_f = current_epoch, root_f = block_root \<rparr>,
+          justification_bits_f := updated_justification_bits
+        \<rparr>)
+      } else Some state;
+
+    let bits = justification_bits_f state;
+
+    let state = (
+      if bitvector_all bits 1 4 \<and>
+         the (epoch_f old_previous_justified_checkpoint .+ Epoch (u64 3)) = current_epoch
+      then
+        state \<lparr> finalized_checkpoint_f := old_previous_justified_checkpoint \<rparr>
+      else state
+    );
+    let state = (
+      if bitvector_all bits 1 3 \<and>
+         the (epoch_f old_previous_justified_checkpoint .+ Epoch (u64 2)) = current_epoch
+      then
+        state \<lparr> finalized_checkpoint_f := old_previous_justified_checkpoint \<rparr>
+      else state
+    );
+    let state = (
+      if bitvector_all bits 0 3 \<and>
+         the (epoch_f old_current_justified_checkpoint .+ Epoch (u64 2)) = current_epoch
+      then
+        state \<lparr> finalized_checkpoint_f := old_current_justified_checkpoint \<rparr>
+      else state
+    );
+    let state = (
+      if bitvector_all bits 0 2 \<and>
+         the (epoch_f old_current_justified_checkpoint .+ Epoch (u64 1)) = current_epoch
+      then
+        state \<lparr> finalized_checkpoint_f := old_current_justified_checkpoint \<rparr>
+      else state
+    );
+    Some state
   }"
 
 definition process_justification_and_finalization ::
@@ -35,7 +87,8 @@ where
       total_active_balance \<leftarrow> get_total_active_balance c state;
       previous_target_balance \<leftarrow> get_total_balance c state previous_indices;
       current_target_balance \<leftarrow> get_total_balance c state previous_indices;
-      None
+      weigh_justification_and_finalization
+        c state total_active_balance previous_target_balance current_target_balance
     }
   }"
 
