@@ -25,6 +25,15 @@ definition get_active_validator_indices :: "BeaconState \<Rightarrow> Epoch \<Ri
   "get_active_validator_indices state e \<equiv>
     [i. (i, v) \<leftarrow> enumerate (list_inner (validators_f state)), is_active_validator v e]"
 
+definition get_eligible_validator_indices :: "Config \<Rightarrow> BeaconState \<Rightarrow> (u64 list) option" where
+  "get_eligible_validator_indices c state \<equiv> do {
+    let previous_epoch = get_previous_epoch c state;
+    previous_epoch_p1 \<leftarrow> previous_epoch .+ Epoch (u64 1);
+    Some [i. (i, v) \<leftarrow> enumerate (list_inner (validators_f state)),
+          is_active_validator v previous_epoch \<or>
+            (slashed_f v \<and> previous_epoch_p1 < withdrawable_epoch_f v)]
+  }"
+
 definition has_flag :: "ParticipationFlags \<Rightarrow> nat \<Rightarrow> bool" where
   "has_flag flags flag_index \<equiv>
     case flags of ParticipationFlags bools \<Rightarrow> bools ! flag_index"

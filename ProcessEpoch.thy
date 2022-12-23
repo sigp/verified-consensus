@@ -92,4 +92,33 @@ where
     }
   }"
 
+(* TODO: keep going with foldl *)
+definition get_flag_index_deltas ::
+  "Config \<Rightarrow> BeaconState \<Rightarrow> nat \<Rightarrow> (u64 list \<times> u64 list) option"
+where
+  "get_flag_index_deltas c state flag_index \<equiv> do {
+    let rewards = [u64 0. _ \<leftarrow> [0..<length (list_inner (validators_f state))]];
+    let penalties = rewards;
+    let previous_epoch = get_previous_epoch c state;
+    unslashed_participating_indices \<leftarrow> get_unslashed_participating_indices c state flag_index
+                                                                           previous_epoch;
+    let weight = PARTICIPATION_FLAG_WEIGHTS ! flag_index;
+    unslashed_participating_balance \<leftarrow> get_total_balance c state unslashed_participating_indices;
+    unslashed_participating_increments \<leftarrow> unslashed_participating_balance \\
+                                            EFFECTIVE_BALANCE_INCREMENT c;
+    total_active_balance \<leftarrow> get_total_active_balance c state;
+    active_balance_increments \<leftarrow> total_active_balance \\ EFFECTIVE_BALANCE_INCREMENT c;
+    eligible_validator_indices \<leftarrow> get_eligible_validator_indices c state;
+    None
+  }"
+
+definition process_rewards_and_penalties ::
+  "Config \<Rightarrow> BeaconState \<Rightarrow> BeaconState option"
+where
+  "process_rewards_and_penalties c state \<equiv>
+    if get_current_epoch c state = GENESIS_EPOCH then
+      Some state else do {
+    None
+  }"
+
 end
