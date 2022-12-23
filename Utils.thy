@@ -43,4 +43,26 @@ definition bitvector_all :: "Bitvector \<Rightarrow> nat \<Rightarrow> nat \<Rig
   "bitvector_all bv start end \<equiv>
     list_all (\<lambda>x. x) (take (end - start) (drop start (bitvector_inner bv)))"
 
+definition flip :: "('a \<Rightarrow> 'b \<Rightarrow> 'c) \<Rightarrow> 'b \<Rightarrow> 'a \<Rightarrow> 'c" where
+  "flip f x y \<equiv> f y x"
+
+function integer_squareroot_aux :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 \<Rightarrow> (u64 \<times> u64) option" where
+  "integer_squareroot_aux x y n =
+    (if y < x then
+      Some (x, y)
+    else do {
+      let x' = y;
+      y' \<leftarrow> (x' .+ n);
+      integer_squareroot_aux x' y' n
+  })"
+  by auto
+
+definition integer_squareroot :: "u64 \<Rightarrow> u64 option" where
+  "integer_squareroot n \<equiv> do {
+    let x = n;
+    y \<leftarrow> (x .+ u64 1) \<bind> (flip (\\) (u64 2));
+    (x', _) \<leftarrow> integer_squareroot_aux x y n;
+    Some x'
+  }"
+
 end

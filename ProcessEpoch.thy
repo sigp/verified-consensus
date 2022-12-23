@@ -97,8 +97,8 @@ definition get_flag_index_deltas ::
   "Config \<Rightarrow> BeaconState \<Rightarrow> nat \<Rightarrow> (u64 list \<times> u64 list) option"
 where
   "get_flag_index_deltas c state flag_index \<equiv> do {
-    let rewards = [u64 0. _ \<leftarrow> [0..<length (list_inner (validators_f state))]];
-    let penalties = rewards;
+    let init_rewards = [u64 0. _ \<leftarrow> [0..<length (list_inner (validators_f state))]];
+    let init_penalties = init_rewards;
     let previous_epoch = get_previous_epoch c state;
     unslashed_participating_indices \<leftarrow> get_unslashed_participating_indices c state flag_index
                                                                            previous_epoch;
@@ -109,6 +109,10 @@ where
     total_active_balance \<leftarrow> get_total_active_balance c state;
     active_balance_increments \<leftarrow> total_active_balance \\ EFFECTIVE_BALANCE_INCREMENT c;
     eligible_validator_indices \<leftarrow> get_eligible_validator_indices c state;
+    res \<leftarrow> foldl (\<lambda>opt index. do {
+      (rewards, penalties) \<leftarrow> opt;
+      None
+    }) (Some (init_rewards, init_penalties)) eligible_validator_indices;
     None
   }"
 

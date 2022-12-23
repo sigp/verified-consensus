@@ -84,4 +84,11 @@ definition get_block_root :: "Config \<Rightarrow> BeaconState \<Rightarrow> Epo
   "get_block_root c state epoch \<equiv>
     get_block_root_at_slot c state (compute_start_slot_at_epoch c epoch)"
 
+definition get_base_reward_per_increment :: "Config \<Rightarrow> BeaconState \<Rightarrow> u64 option" where
+  "get_base_reward_per_increment c state \<equiv> do {
+    total_active_balance \<leftarrow> get_total_active_balance c state;
+    sqrt_total_active_balance \<leftarrow> integer_squareroot total_active_balance;
+    (EFFECTIVE_BALANCE_INCREMENT c .* BASE_REWARD_FACTOR c) \<bind> (flip (\\) sqrt_total_active_balance)
+  }"
+
 end
