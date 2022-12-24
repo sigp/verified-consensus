@@ -91,4 +91,23 @@ definition get_base_reward_per_increment :: "Config \<Rightarrow> BeaconState \<
     (EFFECTIVE_BALANCE_INCREMENT c .* BASE_REWARD_FACTOR c) \<bind> (flip (\\) sqrt_total_active_balance)
   }"
 
+definition get_base_reward :: "Config \<Rightarrow> BeaconState \<Rightarrow> u64 \<Rightarrow> u64 option" where
+  "get_base_reward c state index \<equiv> do {
+    validator \<leftarrow> list_index (validators_f state) index;
+    increments \<leftarrow> effective_balance_f validator \\ EFFECTIVE_BALANCE_INCREMENT c;
+    base_reward_per_increment \<leftarrow> get_base_reward_per_increment c state;
+    increments .* base_reward_per_increment
+  }"
+
+definition get_finality_delay :: "Config \<Rightarrow> BeaconState \<Rightarrow> u64 option" where
+  "get_finality_delay c state \<equiv>
+    epoch_to_u64 (get_previous_epoch c state) .-
+    epoch_to_u64 (epoch_f (finalized_checkpoint_f state))"
+
+definition is_in_inactivity_leak :: "Config \<Rightarrow> BeaconState \<Rightarrow> bool option" where
+  "is_in_inactivity_leak c state \<equiv> do {
+    finality_delay \<leftarrow> get_finality_delay c state;
+    Some (finality_delay > MIN_EPOCHS_TO_INACTIVITY_PENALTY c)
+  }"
+
 end

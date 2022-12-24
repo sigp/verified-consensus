@@ -92,7 +92,6 @@ where
     }
   }"
 
-(* TODO: keep going with foldl *)
 definition get_flag_index_deltas ::
   "Config \<Rightarrow> BeaconState \<Rightarrow> nat \<Rightarrow> (u64 list \<times> u64 list) option"
 where
@@ -107,13 +106,33 @@ where
     unslashed_participating_increments \<leftarrow> unslashed_participating_balance \\
                                             EFFECTIVE_BALANCE_INCREMENT c;
     total_active_balance \<leftarrow> get_total_active_balance c state;
-    active_balance_increments \<leftarrow> total_active_balance \\ EFFECTIVE_BALANCE_INCREMENT c;
+    active_increments \<leftarrow> total_active_balance \\ EFFECTIVE_BALANCE_INCREMENT c;
     eligible_validator_indices \<leftarrow> get_eligible_validator_indices c state;
-    res \<leftarrow> foldl (\<lambda>opt index. do {
+    foldl (\<lambda>opt index. do {
       (rewards, penalties) \<leftarrow> opt;
-      None
-    }) (Some (init_rewards, init_penalties)) eligible_validator_indices;
-    None
+      base_reward \<leftarrow> get_base_reward c state index;
+      in_inactivity_leak \<leftarrow> is_in_inactivity_leak c state;
+      let index_nat = u64_to_nat index;
+      if index \<in> unslashed_participating_indices then (
+        if \<not> in_inactivity_leak then do {
+          reward_numerator \<leftarrow> base_reward .* weight \<bind> flip (.*) unslashed_participating_increments;
+          reward_denominator \<leftarrow> active_increments .* WEIGHT_DENOMINATOR;
+          reward \<leftarrow> reward_numerator \\ reward_denominator;
+          total_reward \<leftarrow> rewards ! index_nat .+ reward;
+          let rewards' = list_update rewards index_nat total_reward;
+          Some (rewards', penalties)
+        } else do {
+          Some (rewards, penalties)
+        }
+      ) else if flag_index \<noteq> TIMELY_HEAD_FLAG_INDEX then do {
+        penalty \<leftarrow> base_reward .* weight \<bind> (flip (\\) WEIGHT_DENOMINATOR);
+        total_penalty \<leftarrow> penalties ! index_nat .+ penalty;
+        let penalties' = list_update penalties index_nat total_penalty;
+        Some (rewards, penalties')
+      } else (
+        Some (rewards, penalties)
+      )
+    }) (Some (init_rewards, init_penalties)) eligible_validator_indices
   }"
 
 definition process_rewards_and_penalties ::
