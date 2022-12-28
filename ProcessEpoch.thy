@@ -135,13 +135,55 @@ where
     }) (Some (init_rewards, init_penalties)) eligible_validator_indices
   }"
 
+definition get_inactivity_penalty_deltas ::
+  "Config \<Rightarrow> BeaconState \<Rightarrow> (u64 list \<times> u64 list) option"
+where
+  "get_inactivity_penalty_deltas c state \<equiv> do {
+    let init_rewards = [u64 0. _ \<leftarrow> [0..<length (list_inner (validators_f state))]];
+    let init_penalties = init_rewards;
+    let previous_epoch = get_previous_epoch c state;
+    matching_target_indices \<leftarrow> get_unslashed_participating_indices c state
+                                                                   TIMELY_TARGET_FLAG_INDEX
+                                                                   previous_epoch;
+    eligible_validator_indices \<leftarrow> get_eligible_validator_indices c state;
+    foldl (\<lambda>opt index. do {
+      (rewards, penalties) \<leftarrow> opt;
+      let index_nat = u64_to_nat index;
+      if index \<notin> matching_target_indices then do {
+        validator \<leftarrow> list_index (validators_f state) index;
+        inactivity_score \<leftarrow> list_index (inactivity_scores_f state) index;
+        penalty_numerator \<leftarrow> effective_balance_f validator .* inactivity_score;
+        penalty_denominator \<leftarrow> INACTIVITY_SCORE_BIAS c .* INACTIVITY_PENALTY_QUOTIENT_ALTAIR;
+        penalty \<leftarrow> penalty_numerator \\ penalty_denominator;
+        total_penalty \<leftarrow> penalties ! index_nat .+ penalty;
+        let penalties' = list_update penalties index_nat total_penalty;
+        Some (rewards, penalties')
+      } else opt
+    }) (Some (init_rewards, init_penalties)) eligible_validator_indices;
+    None
+  }"
+
 definition process_rewards_and_penalties ::
   "Config \<Rightarrow> BeaconState \<Rightarrow> BeaconState option"
 where
   "process_rewards_and_penalties c state \<equiv>
     if get_current_epoch c state = GENESIS_EPOCH then
       Some state else do {
-    None
+
+    flag_deltas \<leftarrow> foldl (\<lambda>opt_deltas flag_index. do {
+      all_deltas \<leftarrow> opt_deltas;
+      flag_index_deltas \<leftarrow> get_flag_index_deltas c state flag_index;
+      Some (all_deltas @ [flag_index_deltas])
+    }) (Some []) [0..<length PARTICIPATION_FLAG_WEIGHTS];
+
+    inactivity_penalty_deltas \<leftarrow> get_inactivity_penalty_deltas c state;
+    let deltas = flag_deltas @ [inactivity_penalty_deltas];
+    foldl (\<lambda>opt_state (rewards, penalties). do {
+      state' \<leftarrow> opt_state;
+      foldl (\<lambda>opt_state' index. do {
+        None
+      }) (Some state') [0..<length (list_inner (validators_f state'))]
+    }) (Some state) deltas
   }"
 
 end
