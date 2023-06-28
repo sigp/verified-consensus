@@ -12,6 +12,7 @@ get_eligible_validator_indices,validators.withdrawable_epoch
 get_finality_delay,finalized_checkpoint
 increase_balance,balances
 decrease_balance,balances
+get_total_balance,validators.effective_balance
 get_base_reward,validators.effective_balance
 process_registry_updates,validators.effective_balance
 process_registry_updates,validators.activation_eligibility_epoch
@@ -24,6 +25,7 @@ initiate_validator_exit,validators.exit_epoch
 process_slashings,validators.slashed
 process_slashings,validators.withdrawable_epoch
 process_slashings,validators.effective_balance
+process_slashings,slashings
 process_effective_balance_updates,validators.effective_balance
 process_effective_balance_updates,balances
 get_randao_mix,randao_mixes
@@ -34,3 +36,5 @@ process_participation_flag_updates,validators.len
 process_sync_committee_updates,current_sync_committee
 process_sync_committee_updates,next_sync_committee
 get_next_sync_committee_indices,validators.effective_balance
+get_inactivity_penalty_deltas,inactivity_scores
+get_inactivity_penalty_deltas,validators.effective_balance
