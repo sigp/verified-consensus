@@ -43,10 +43,10 @@ data between states, and therefore better caching. The downside of the tree-base
 tends to have substantially slower indexing (e.g. computing `state.validators[i]`), and
 iteration is slightly slower (same time complexity with a larger constant).
 
-| Operation | Array-based | Tree-based |
-|-----------|-------------|------------|
-| index     | $O(1)$      | $O(log n)$ |
-| iterate   | $O(n)$      | $O(c n)$   |
+| Operation | Array-based | Tree-based  |
+|-----------|-------------|-------------|
+| index     | $O(1)$      | $O(\log n)$ |
+| iterate   | $O(n)$      | $O(c * n)$  |
 
 Hence in the tree-based paradigm it becomes even more important to remove random-access indexing,
 and to remove $O(n^2)$ nested iterations which amplify the higher cost of tree-based iteration.
@@ -161,7 +161,7 @@ Implementations may choose to use an existing progressive balances cache if they
 or to compute one anew in a single iteration, bringing the total number of $O(n)$ iterations in
 epoch processing to 2.
 
-```
+```python
 def get_progressive_balances(state):
     # Get cached balances from state or compute in a single iteration.
     # [ASSUMED]
