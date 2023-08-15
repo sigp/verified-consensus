@@ -91,17 +91,81 @@ the previous epoch (`total_active_balance`) and 6 for the subsets of validators 
 and current epochs respectively, who attested correctly for each of 3 attestation flags (head,
 target, source).
 
-From these fundamental aggregate sums the finalization and justification aggregates are computed,
+From these aggregate sums the finalization and justification aggregates are computed,
 which also feed into later calculations. Conveniently, the aggregate sums can be computed _once_ at
-the beginning of `process_epoch` and reused by all subsequent phases.
+the beginning of `process_epoch` and reused in all subsequent phases. The handling of these
+aggregates happens as part of the _Progressive Balances Cache_ described below.
+
+The activation queue also requires aggregation over the entire validator set, and we have a
+two-phase process for this aggregation which is computed over two subsequent `process_epoch` calls.
+See the _Activation Queue_ section below.
 
 ## Progressive Balances Cache
 
+We define the progressive balances cache as a structure holding the 7 aggregate balances like so:
+
 ```python
-get_total_balance(
-    state,
-    get_unslashed_participating_indices(state, TIMELY_TARGET_FLAG_INDEX, get_previous_epoch(state)),
-)
+class ProgressiveBalancesCache:
+    # Total active balance for the previous epoch.
+    total_active_balance: Gwei
+    # Attestation total balances for the previous epoch.
+    # Indexed by `TIMELY_SOURCE_FLAG_INDEX`, etc.
+    previous_epoch_flag_attesting_balances: List[Gwei, 3],
+    # Attestation total balances for the current epoch.
+    current_epoch_flag_attesting_balances: List[Gwei, 3],
+```
+
+The correct values of the progressive balances cache are defined by the `valid_progressive_balances`
+predicate:
+
+```python
+def get_flag_attesting_balance(state: BeaconState, flag_index: int, epoch: Epoch) -> Gwei:
+    return get_total_balance(state, get_unslashed_participating_indices(state, flag_index, epoch))
+
+def valid_progressive_balances(
+    state: BeaconState,
+    p: ProgressiveBalancesCache
+) -> Bool:
+    previous_epoch = get_previous_epoch(state)
+    current_epoch = get_current_epoch(state)
+
+    return p.total_active_balance == get_total_active_balance(state) and
+        p.previous_epoch_flag_attesting_balances == [
+            get_flag_attesting_balance(state, TIMELY_SOURCE_FLAG_INDEX, previous_epoch),
+            get_flag_attesting_balance(state, TIMELY_TARGET_FLAG_INDEX, previous_epoch),
+            get_flag_attesting_balance(state, TIMELY_HEAD_FLAG_INDEX, previous_epoch)
+        ] and
+        p.current_epoch_flag_attesting_balances == [
+            get_flag_attesting_balance(state, TIMELY_SOURCE_FLAG_INDEX, current_epoch),
+            get_flag_attesting_balance(state, TIMELY_TARGET_FLAG_INDEX, current_epoch),
+            get_flag_attesting_balance(state, TIMELY_HEAD_FLAG_INDEX, current_epoch)
+        ]
+```
+
+Since changes were made to fork choice to handle unrealised justification and finalization
+(see [disclosure][fc_pull_tips_disc]), consensus clients need to run
+`process_justification_and_finalization` after _every_ block. To do this efficiently, many of them
+include a cache that is equivalent to the progressive balances cache. This cache is called
+_progressive_ because it computes the aggregate sums incrementally, updating them after relevant
+events in each block.
+
+Although in future work we may prove the correctness of a progressive balance cache implementation,
+in this formalisation of `process_epoch` we assume that there exists _some_ function called
+`get_progressive_balances` which satisfies:
+
+```python
+valid_progressive_balances(state, get_progressive_balances(state)) == True
+```
+
+Implementations may choose to use an existing progressive balances cache if they have one,
+or to compute one anew in a single iteration, bringing the total number of $O(n)$ iterations in
+epoch processing to 2.
+
+```
+def get_progressive_balances(state):
+    # Get cached balances from state or compute in a single iteration.
+    # [ASSUMED]
+    ...
 ```
 
 ## Activation Queue
@@ -150,3 +214,4 @@ TODO
 ### It is safe to reorder `process_eth1_data_reset`
 
 [consensus-specs]: https://github.com/ethereum/consensus-specs
+[fc_pull_tips_disc]: https://notes.ethereum.org/@djrtwo/2023-fork-choice-reorg-disclosure
