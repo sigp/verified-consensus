@@ -158,7 +158,7 @@ valid_progressive_balances(state, get_progressive_balances(state)) == True
 ```
 
 Implementations may choose to use an existing progressive balances cache if they have one,
-or to compute one anew in a single iteration, bringing the total number of $O(n)$ iterations in
+or can compute one anew in a single iteration, bringing the total number of $O(n)$ iterations in
 epoch processing to 2.
 
 ```python
@@ -169,6 +169,38 @@ def get_progressive_balances(state):
 ```
 
 ## Activation Queue
+
+Another aggregate computation requiring special consideration is the calculation of the activation
+queue: the list of validators to be activated in the next epoch. The spec calculates this in its
+own $O(n)$ iteration during `process_registry_updates`:
+
+```python
+# Queue validators eligible for activation and not yet dequeued for activation
+activation_queue = sorted([
+    index for index, validator in enumerate(state.validators)
+    if is_eligible_for_activation(state, validator)
+    # Order by the sequence of activation_eligibility_epoch setting and then index
+], key=lambda index: (state.validators[index].activation_eligibility_epoch, index))
+```
+
+Instead of this loop, our algorithm computes the queue across two calls to `process_epoch`
+as part of the two single-pass loops:
+
+- In the first single-pass loop (end of epoch $N - 1$): add validators that *could* be eligible for
+  activation at the end of epoch $N$ to a cache that is sorted by `(activation_eligibiliy_epoch,
+  validator_index)`.
+- In the second single-pass loop (end of epoch $N$): filter the validators from the preliminary
+  queue based on whether their `activation_eligibility_epoch` is less than or equal to the
+  finalized epoch, and the `churn_limit` (which bounds the number of activated validators).
+
+Formally we define the activation queue as a structure:
+
+```
+class ActivationQueue:
+    # List of validators that *could* be eligible for activation.
+    # Implementations should use a data structure with O(log n) inserts instead of a list.
+    eligible_validators: [(Epoch, ValidatorIndex)]
+```
 
 TODO
 
@@ -204,6 +236,8 @@ def process_epoch(state: BeaconState) -> None:
 ```
 
 ## Informal Proof Sketch
+
+### Activation Queue Proof
 
 ### It is safe to cache the progressive balances
 
