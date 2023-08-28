@@ -195,14 +195,69 @@ as part of the two single-pass loops:
 
 Formally we define the activation queue as a structure:
 
-```
+```python
 class ActivationQueue:
     # List of validators that *could* be eligible for activation.
     # Implementations should use a data structure with O(log n) inserts instead of a list.
     eligible_validators: [(Epoch, ValidatorIndex)]
 ```
 
-TODO
+Entry into the tentative activation queue is determined by the predicate
+`could_be_eligible_for_activation_at(validator, N)`:
+
+```python
+def could_be_eligible_for_activation_at(validator: Validator, epoch: Epoch) -> bool:
+    return (
+        # Placement in queue *could be* finalized at `epoch`
+        validator.activation_eligibility_epoch < epoch
+        # Has not yet been activated
+        and validator.activation_epoch == FAR_FUTURE_EPOCH
+    )
+```
+
+This predicate is called for each validator during epoch processing at the end
+of epoch $N - 1$ by the function:
+
+```python
+def add_if_could_be_eligible_for_activation(
+    activation_queue: ActivationQueue,
+    index: ValidatorIndex,
+    validator: Validator,
+    next_epoch: Epoch
+):
+    if could_be_eligible_for_activation_at(validator, next_epoch):
+        self.eligible_validators.append((validator.activation_eligibility_epoch, index))
+        self.eligible_validators.sort()
+```
+
+This is usually done as part of epoch processing for the previous epoch, although for cases where
+that is not possible we also define an initialization function:
+
+```python
+def new_activation_queue(
+    state: BeaconState
+) -> ActivationQueue:
+    activation_queue = ActivationQueue()
+    next_epoch = get_next_epoch(state) + 1
+    for (i, validator) in enumerate(state.validators):
+        add_if_could_be_eligible_for_activation(activation_queue, i, validator, next_epoch)
+    return activation_queue
+```
+
+During epoch processing for epoch $N$, the speculative queue is restricted based
+on the true finalized epoch and the churn limit:
+
+```python
+def get_validators_eligible_for_activation(
+    activation_queue: ActivationQueue,
+    finalized_epoch: Epoch,
+    churn_limit: uint64,
+) -> [ValidatorIndex]:
+    return [
+        index for (eligibility_epoch, index) in activation_queue.eligible_validators
+        if eligibility_epoch <= finalized_epoch
+    ][:churn_limit]
+```
 
 ## Epoch Cache
 
@@ -237,7 +292,49 @@ def process_epoch(state: BeaconState) -> None:
 
 ## Informal Proof Sketch
 
+### Auxiliary Lemmas
+
+**Lemma `justification_upper_bound`:** During epoch processing at the end of epoch
+$N$, after running `process_justification_and_finalization` the current justified epoch of the
+state is at most $N$.
+
+**Proof**: By induction on $N$. For $N=0$, the current justified epoch is also 0. For later epochs,
+`current_justified_checkpoint is not modified outside of `process_justification_and_finalization`,
+which either sets it to a checkpoint with epoch $N - 1$ (the previous epoch), the current epoch
+($N$), or leaves it untouched ($N - 1$ by the inductive hypothesis).
+
+**Lemma `finalization_upper_bound`:** If $N > 0$ then during epoch processing at the end of epoch
+$N$, after running `process_justification_and_finalization` the finalized epoch of the state is at
+most $N - 1$.
+
+**Proof**: By induction on $N$. At the end of epoch $N = 1$ the finalized checkpoint remains at epoch
+0 due to the early return for `current_epoch <= GENESIS_EPOCH + 1`. In subsequent epochs the
+finalized epoch is set in `process_justification_and_finalization` to either the previous epoch's
+current justified epoch (at most $N - 1$ by lemma `justification_upper_bound`) or the previous
+epoch's previous justified epoch (at most $N - 2$ due to this value being set from
+`current_justified_checkpoint`).
+
 ### Activation Queue Proof
+
+**Lemma `aq_correct`:** The activation queue computed by `process_registry_updates` is equal to
+the queue computed by `get_validators_eligible_for_activation`.
+
+**Proof:**
+
+- We handle epoch $N = 0$ separately. In this case the activation queue computed by
+  `process_registry_updates` contains `churn_limit` validators with
+  `activation_eligibility_epoch=0`. The tentative queue formed by calling
+  `new_activation_queue` on any epoch 0 state contains all validators with
+  `activation_eligibility_epoch < 1`, i.e. `activation_eligibility_epoch=0`. Due to
+  `activation_eligibility_epoch` being immutable throughout block processing, it is sufficient
+  to use any epoch 0 state. The filtering of the tentative queue by
+  `get_validators_eligible_for_activation` does not remove any validators, because the finalized
+  epoch is 0 and cannot change (`<= GENESIS_EPOCH + 1`). The tentative queue is sorted the same as
+  the queue from `process_registry_updates`, and is reduced to at most `churn_limit` items by
+  `get_validators_eligible_for_activation`. Therefore, as long as the `churn_limit` parameter is set
+  to `get_churn_limit(state)`, the two queues are equal.
+- For $N > 0$ we have:
+    - TODO
 
 ### It is safe to cache the progressive balances
 
