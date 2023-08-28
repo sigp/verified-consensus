@@ -299,7 +299,7 @@ $N$, after running `process_justification_and_finalization` the current justifie
 state is at most $N$.
 
 **Proof**: By induction on $N$. For $N=0$, the current justified epoch is also 0. For later epochs,
-`current_justified_checkpoint is not modified outside of `process_justification_and_finalization`,
+`current_justified_checkpoint` is not modified outside of `process_justification_and_finalization`,
 which either sets it to a checkpoint with epoch $N - 1$ (the previous epoch), the current epoch
 ($N$), or leaves it untouched ($N - 1$ by the inductive hypothesis).
 
