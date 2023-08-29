@@ -353,9 +353,20 @@ the queue computed by `get_validators_eligible_for_activation`.
     - The churn limit used to limit both queues is equal, so the list of validators considered
       for activation is the same for both approaches.
 
-### It is safe to cache the progressive balances
+### Justificaton and Finalization Proof
 
-TODO
+**Lemma:** Computing justification and finalization using the progressive balances cache
+is equivalent to `process_justification_and_finalization`.
+
+**Proof**: The progressive balances cache `p` satisfies `valid_progressive_balances(pre_state, p)` where `pre_state` is the state at the very start of epoch processing before any changes are made. During the execution of `process_justification_and_finalization`, the aggregate values `total_active_balance`, `previous_target_balance` and `current_target_balance` are equal to `p.total_active_balance`, `p.previous_epoch_flag_attesting_balances[TIMELY_TARGET_FLAG_INDEX]` and `p.current_epoch_flag_attesting_balances[TIMELY_TARGET_FLAG_INDEX]` respectively. This follows from the equality established by `valid_progressive_balances` and the fact that no modifications are made to `pre_state` before these values are calculated by `process_justification_and_finalization`. Therefore, both functions pass the same values to `weigh_justification_and_finalization`
+, and compute the same result.
+
+### Rewards and Penalties Proof
+
+**Lemma:** Computing rewards and penalties during `process_epoch_single_pass` is equivalent
+to computing them using `process_rewards_and_penalties`.
+
+**Proof:** TODO
 
 ### It is safe to reorder `process_slashings`
 
