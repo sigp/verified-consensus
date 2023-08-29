@@ -183,8 +183,7 @@ activation_queue = sorted([
 ], key=lambda index: (state.validators[index].activation_eligibility_epoch, index))
 ```
 
-Instead of this loop, our algorithm computes the queue across two calls to `process_epoch`
-as part of the two single-pass loops:
+Instead of this loop, our algorithm computes the queue across two consecutive calls to `process_epoch` as part of the single-pass loops of each:
 
 - In the first single-pass loop (end of epoch $N - 1$): add validators that *could* be eligible for
   activation at the end of epoch $N$ to a cache that is sorted by `(activation_eligibiliy_epoch,
@@ -238,7 +237,7 @@ def new_activation_queue(
     state: BeaconState
 ) -> ActivationQueue:
     activation_queue = ActivationQueue()
-    next_epoch = get_next_epoch(state) + 1
+    next_epoch = get_current_epoch(state) + 1
     for (i, validator) in enumerate(state.validators):
         add_if_could_be_eligible_for_activation(activation_queue, i, validator, next_epoch)
     return activation_queue
@@ -334,7 +333,25 @@ the queue computed by `get_validators_eligible_for_activation`.
   `get_validators_eligible_for_activation`. Therefore, as long as the `churn_limit` parameter is set
   to `get_churn_limit(state)`, the two queues are equal.
 - For $N > 0$ we have:
-    - TODO
+    - In epoch processing at the end of epoch $N - 1$ we compute the tentative queue containing
+      all validators with `activation_eligibility_epoch < N` that have not yet been activated.
+    - In epoch processing at the end of epoch $N$ we know that the finalized epoch is $\leq N$
+      by the lemma `finalization_upper_bound`.
+    - Validators do not become eligible for activation until the epoch *after* they are processed
+      by `process_registry_updates`, which sets `activation_eligibility_epoch = current_epoch + 1`.
+      Therefore validators that are marked eligible in epoch $N - 1$ have an eligibility epoch
+      equal to $N$, and validators marked eligible in epoch $N$ have an eligibility epoch equal to
+      $N + 1$. Neither are eligible for activation in epoch $N$, because the activation queue
+      considers only validators with `activation_eligibility_epoch <= state.finalized_checkpoint.epoch <= N - 1`.
+      Therefore the list of not-yet-activated validators in the tentative queue with
+      `activation_eligibility_epoch < N` is a superset of the list of validators in the activation
+      queue.
+    - By filtering the tentative queue based on the new finalized epoch computed during epoch $N$,
+      we obtain equality with the `activation_queue` from `process_registry_updates`. Due to the
+      queue being sorted by increasing eligibility epoch, the `activation_queue` is a prefix of
+      the tentative queue prior to filtering.
+    - The churn limit used to limit both queues is equal, so the list of validators considered
+      for activation is the same for both approaches.
 
 ### It is safe to cache the progressive balances
 
