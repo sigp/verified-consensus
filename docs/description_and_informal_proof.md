@@ -335,7 +335,7 @@ the queue computed by `get_validators_eligible_for_activation`.
 - For $N > 0$ we have:
     - In epoch processing at the end of epoch $N - 1$ we compute the tentative queue containing
       all validators with `activation_eligibility_epoch < N` that have not yet been activated.
-    - In epoch processing at the end of epoch $N$ we know that the finalized epoch is $\leq N$
+    - In epoch processing at the end of epoch $N$ we know that the finalized epoch is $\leq N - 1$
       by the lemma `finalization_upper_bound`.
     - Validators do not become eligible for activation until the epoch *after* they are processed
       by `process_registry_updates`, which sets `activation_eligibility_epoch = current_epoch + 1`.
