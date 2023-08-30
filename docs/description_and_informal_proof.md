@@ -313,6 +313,16 @@ current justified epoch (at most $N - 1$ by lemma `justification_upper_bound`) o
 epoch's previous justified epoch (at most $N - 2$ due to this value being set from
 `current_justified_checkpoint`).
 
+**Lemma `active_indices_fixed`:** The value of `get_active_validator_indices(state, N)` is the
+same for all intermediate values of `state` during epoch processing at the end of epoch `N`.
+
+**Proof:** TODO
+
+**Lemma `prev_active_indices_fixed`:** The value of `get_active_validator_indices(state, N - 1)` is
+the same for all intermediate values of `state` during epoch processing at the end of epoch `N`.
+
+**Proof:** TODO
+
 ### Activation Queue Proof
 
 **Lemma `aq_correct`:** The activation queue computed by `process_registry_updates` is equal to
@@ -366,7 +376,50 @@ is equivalent to `process_justification_and_finalization`.
 **Lemma:** Computing rewards and penalties during `process_epoch_single_pass` is equivalent
 to computing them using `process_rewards_and_penalties`.
 
-**Proof:** TODO
+**Proof:** In `process_rewards_and_penalties` rewards are computed for the entire validator registry
+for each of the 3 attestation flags using `get_flag_index_deltas`, while
+`get_inactivity_penalty_delta` computes the rewards for inactivity penalties. Our claim is that the
+single-pass functions `get_flag_index_delta` and `get_inactivity_penalty` compute the same rewards
+for each individual index, and that the decomposition into a single loop does not affect the result.
+
+For `get_flag_index_deltas` the main inputs are the list of `unslashed_participating_indices`, and
+the `unslashed_participating_balance` derived from the participating indices and their respective
+effective balances (`state.validators[i].effective_balance`). The participating indices are computed
+by `get_unslashed_participating_indices` which uses `get_active_validator_indices` for the previous
+epoch. By the lemma `prev_active_indices_fixed` we know that the set of active indices is equal to
+the set of active indices that would have been computed from the `pre_state` at the start of epoch
+processing (before any mutations were made). Further, the `previous_epoch_particiption` field used
+to determine participation is only mutated as part of `process_participation_flag_updates`, which
+happens *after* single-pass epoch processing and *after* `process_rewards_and_penalties`. Similarly,
+the slashed status of each validator is immutable throughout all of epoch processing and does not
+affect the result of `get_unslashed_participating_indices`. Therefore the participating indices used
+by `get_flag_index_deltas` are equal to the indices used by `valid_progressive_balances` at the
+start of epoch processing. Likewise the validator `effective_balance` field is immutable until
+`process_effective_balance_updates` runs, and so the `unslashed_participating_balance` is equal to
+the corresponding total balance from the
+`progressive_balances.previous_epoch_flag_attesting_balances[flag_index]`.
+
+TODO:
+
+- base_reward fixed
+- is_in_inactivity_leak not affected by single-pass processing
+
+#### Supporting `call_db` analysis
+
+```
+> SELECT * FROM indirect_writes WHERE field = "previous_epoch_participation";
+process_participation_flag_updates|previous_epoch_participation
+```
+
+```
+> SELECT * FROM indirect_writes WHERE field = "validators.effective_balance";
+process_effective_balance_updates|validators.effective_balance
+```
+
+```
+> SELECT * FROM indirect_writes WHERE field = "validators.slashed";
+# empty
+```
 
 ### It is safe to reorder `process_slashings`
 
