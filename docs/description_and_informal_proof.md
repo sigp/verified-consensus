@@ -323,6 +323,32 @@ the same for all intermediate values of `state` during epoch processing at the e
 
 **Proof:** TODO
 
+**Lemma `total_active_balance_fixed`:** During epoch processing at the end of epoch $N$,
+the value of `get_total_active_balance(state, N)` is fixed for all intermediate states prior to
+the execution of `process_effective_balance_updates`.
+
+**Proof**: The total active balance is computed from the list of validator indices active in the
+current epoch, which is fixed, per lemma `active_indices_fixed`. The other input is the
+`effective_balance` for each validator, which is only updated in
+`process_effective_balance_updates`.  Therefore the value of `get_total_active_balance` is constant
+until `process_effective_balance_updates` executes.
+
+**Lemma `base_reward_fixed`:** During epoch processing at the end of epoch $N$,
+the value of `get_base_reward(state, index)` is fixed per-index for all intermediate states prior to
+the execution of `process_effective_balance_updates`.
+
+**Proof:** The base reward is computed from the validator's effective balance and the total active
+balance for the current epoch, both of which are fixed until `process_effective_balance_updates`
+executes (by lemma `total_active_balance_fixed`).
+
+**Lemma `is_in_inactivity_leak_fixed`:** During epoch processing at the end of epoch $N$,
+the value of `is_in_inactivity_leak(state)` is fixed for all intermediate states _after_ the
+execution of `process_justification_and_finalization`.
+
+**Proof:** The inactivity leak calculation depends on the previous epoch, which is fixed
+for the given states (the `slot` being constant). Additionally it depends on the finalized epoch,
+which can only change as part of `process_justification_and_finalization`.
+
 ### Activation Queue Proof
 
 **Lemma `aq_correct`:** The activation queue computed by `process_registry_updates` is equal to
@@ -380,7 +406,7 @@ to computing them using `process_rewards_and_penalties`.
 for each of the 3 attestation flags using `get_flag_index_deltas`, while
 `get_inactivity_penalty_delta` computes the rewards for inactivity penalties. Our claim is that the
 single-pass functions `get_flag_index_delta` and `get_inactivity_penalty` compute the same rewards
-for each individual index, and that the decomposition into a single loop does not affect the result.
+for each individual index, and that the fusion into a single loop does not affect the result.
 
 For `get_flag_index_deltas` the main inputs are the list of `unslashed_participating_indices`, and
 the `unslashed_participating_balance` derived from the participating indices and their respective
@@ -399,10 +425,24 @@ start of epoch processing. Likewise the validator `effective_balance` field is i
 the corresponding total balance from the
 `progressive_balances.previous_epoch_flag_attesting_balances[flag_index]`.
 
+Having established that the list of eligible indices and the total unslashed participating balance
+are equal, it remains to show that the delta computed for each validator index is equal under both
+approaches. In the spec's implementation, `get_base_reward(state, index)` and
+`is_in_inactivity_leak(state)` are the two remaining inputs to the reward calculation. We know
+that the `base_reward` value used in `get_flag_index_deltas` is equal to the `base_reward` used by
+single-pass rewards processing which was computed at the start of epoch processing, by the lemma
+`base_reward_fixed`. For `is_in_inactivity_leak`, we know that the value cached by single-pass epoch
+processing is equal to the value used by `get_flag_index_deltas` by the lemma
+`is_in_inactivity_leak_fixed` (both single-pass processing and `get_flag_index_deltas` execute after
+`process_justification_and_finalization`).
+
 TODO:
 
-- base_reward fixed
-- is_in_inactivity_leak not affected by single-pass processing
+- similar argument for inactivity_penalties
+
+Additionally, note that there is no data dependence between the values for different validator
+indices, so it is equivalent to compute and apply all the deltas for validator index $i$
+before computing any deltas for flag index $j$.
 
 #### Supporting `call_db` analysis
 
