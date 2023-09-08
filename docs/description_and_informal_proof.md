@@ -289,6 +289,144 @@ def process_epoch(state: BeaconState) -> None:
     process_sync_committee_updates(state)
 ```
 
+### Single-pass epoch processing `process_epoch_single_pass`
+
+We define a few helper data structures which are used to pass information around during
+single-pass epoch processing:
+
+```python
+# Information about a single validator that is bundled for reuse.
+class ValidatorInfo:
+    index: ValidatorIndex,
+    effective_balance: uint64,
+    base_reward: uint64,
+    is_eligible: bool,
+    is_slashed: bool,
+    is_active_current_epoch: bool,
+    is_active_previous_epoch: bool,
+    previous_epoch_participation: ParticipationFlags,
+    current_epoch_participation: ParticipationFlags,
+```
+
+```python
+# Information about the state that is fixed for the duration of single-pass processing.
+class StateContext:
+    current_epoch: Epoch,
+    next_epoch: Epoch,
+    is_in_inactivity_leak: bool,
+    churn_limit: uint64,
+```
+
+```python
+# Shared context for rewards and penalties calculations.
+class RewardsAndPenaltiesContext:
+    unslashed_participating_increments_array: [uint64; NUM_FLAG_INDICES],
+    active_increments: uint64,
+```
+
+```python
+# Shared context for `process_slashings` calculations.
+class SlashingsContext:
+    adjusted_total_slashing_balance: uint64,
+    target_withdrawable_epoch: Epoch,
+```
+
+```python
+# Shared context for `process_effective_balance_updates`.
+class EffectiveBalancesContext:
+    downward_threshold: uint64,
+    upward_threshold: uint64,
+```
+
+We define initialisers for these contexts:
+
+```python
+def new_slashings_context(
+    state: BeaconState,
+    state_ctxt: StateContext,
+) -> SlashingsContext:
+    adjusted_total_slashing_balance = min(
+        sum(state.slashings) * PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX, total_balance
+    )
+    target_withdrawable_epoch = (
+        state_ctxt.current_peoch + EPOCHS_PER_SLASHINGS_VECTOR // 2
+    )
+    return SlashingsContext(
+        adjusted_total_slashing_balance=adjusted_total_slashing_balance,
+        target_withdrawable_epoch=target_withdrawable_epoch,
+    )
+```
+
+```python
+def unslashed_participating_increment(flag_index) -> Gwei:
+    unslashed_participating_balance = (
+        progressive_balances.previous_epoch_flag_attesting_balances[flag_index]
+    )
+    return unslashed_participating_balance // EFFECTIVE_BALANCE_INCREMENT
+
+def new_rewards_and_penalties_context(
+    progressive_balances: ProgressiveBalancesCache,
+) -> RewardsAndPenaltiesContext:
+    unslashed_participating_increments_array = [
+        unslashed_participating_increment(flag_index)
+        for flag_index in range(NUM_FLAG_INDICES)
+    ]
+    active_increments = (
+        progressive_balances.total_active_balance // EFFECTIVE_BALANCE_INCREMENT
+    )
+    return RewardsAndPenaltiesContext(
+        unslashed_participating_increments_array=unslashed_participating_increments_array,
+        active_increments=active_increments,
+    )
+```
+
+```python
+def new_effective_balances_context() -> EffectiveBalancesContext:
+    hysteresis_increment = uint64(EFFECTIVE_BALANCE_INCREMENT // HYSTERESIS_QUOTIENT)
+    return EffectiveBalancesContext(
+        downward_threshold=hysteresis_increment * HYSTERESIS_DOWNWARD_MULTIPLIER,
+        upward_threshold=hysteresis_increment * HYSTERESIS_UPWARD_MULTIPLIER,
+    )
+```
+
+The function which fuses the loops for the stages is called `process_epoch_single_pass`:
+
+```python
+def process_epoch_single_pass(
+    state: BeaconState,
+    progressive_balances: ProgressiveBalancesCache
+) -> None:
+    assert valid_progessive_balances(state, progressive_balances)
+
+    # TODO: need active indices cache to eliminate loop in `get_validator_churn_limit`
+    state_ctxt = StateContext(
+        current_epoch=get_current_epoch(state),
+        next_epoch=get_current_epcoch(state) + 1,
+        is_in_inactivity_leak=is_in_inactivity_leak(state),
+        churn_limit=get_validator_churn_limit(state),
+    )
+    slashings_ctxt = new_slashings_context(state, state_ctxt)
+    rewards_ctxt = new_rewards_and_penalties_context(progressive_balances)
+    effective_balances_ctxt = new_effective_balances_ctxt()
+
+    for (
+        index,
+        validator,
+        balance,
+        inactivity_score,
+        prev_participation,
+        curr_participation,
+    ) in zip(
+        range(0, len(state.validators)),
+        state.validators,
+        state.balances,
+        state.inactivity_scores,
+        state.previous_epoch_participation,
+        state.current_epoch_participation,
+    ):
+        # TODO
+```
+
 ## Informal Proof Sketch
 
 ### Auxiliary Lemmas
