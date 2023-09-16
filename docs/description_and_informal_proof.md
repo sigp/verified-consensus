@@ -389,6 +389,36 @@ def new_effective_balances_context() -> EffectiveBalancesContext:
     )
 ```
 
+```python
+def is_unslashed_participating_index(
+    validator_info: ValidatorInfo, flag_index: int
+) -> bool:
+    return (
+        validator_info.is_active_previous_epoch
+        and not validator_info.is_slashed
+        and has_flag(validator_info.previous_epoch_participation, flag_index)
+    )
+```
+
+```python
+def get_base_reward_fast(
+    effective_balance: Gwei,
+    progressive_balances: ProgressiveBalancesCache,
+) -> Gwei:
+    increments = effective_balance // EFFECTIVE_BALANCE_INCREMENT
+    return Gwei(increments * get_base_reward_per_increment_fast(progressive_balances))
+
+
+def get_base_reward_per_increment_fast(
+    progressive_balances: ProgressiveBalances,
+) -> Gwei:
+    return Gwei(
+        EFFECTIVE_BALANCE_INCREMENT
+        * BASE_REWARD_FACTOR
+        // integer_squareroot(progressive_balances.total_active_balance)
+    )
+```
+
 The function which fuses the loops for the stages is called `process_epoch_single_pass`:
 
 ```python
@@ -424,7 +454,58 @@ def process_epoch_single_pass(
         state.previous_epoch_participation,
         state.current_epoch_participation,
     ):
-        # TODO
+        is_active_current_epoch = is_active_validator(validator, current_epoch)
+        is_active_previous_epoch = is_active_validator(validator, previous_epoch)
+        is_eligible = is_active_previous_epoch or (
+            validator.slashed and previous_epoch + 1 < validator.withdrawable_epoch
+        )
+        validator_info = ValidatorInfo(
+            index=index,
+            effective_balance=validator.effective_balance,
+            base_reward=get_base_reward_fast(validator.effective_balance, progressive_balances),
+            is_eligible=is_eligible,
+            is_active_current_epoch=is_active_current_epoch,
+            is_active_previous_epoch=is_active_previous_epoch,
+            previous_epoch_participation=prev_participation,
+            current_epoch_participation=curr_participation
+        )
+
+        if current_epoch != GENESIS_EPOCH:
+            # Note: we may change the presentation of this mutation. Due to primitive types
+            # being immutable in Python we cannot pass a mutable reference. Our Isabelle
+            # formalisation will likely model the mutation natively (a write to the heap).
+            state.inactivity_scores[index] = process_single_inactivity_update(
+                inactivity_score,
+                validator_info,
+                state_ctxt,
+            )
+```
+
+### Inactivity: `process_single_inactivity_update`
+
+```python
+def process_single_inactivity_update(
+    inactivity_score: uint64,
+    validator_info: ValidatorInfo,
+    state_ctxt: StateContext,
+) -> uint64:
+    if not validator_info.is_eligible:
+        return inactivity_score
+
+    # Increase inactivity score of inactive validators
+    new_inactivity_score = inactivity_score
+    if is_unslashed_participating_index(validator_info, TIMELY_TARGET_FLAG_INDEX):
+        new_inactivity_score -= min(1, inactivity_score)
+    else:
+        new_inactivity_score += INACTIVITY_SCORE_BIAS
+
+    # Decrease the inactivity score of all eligible validators during a leak-free epoch
+    if not state_ctxt.is_in_inactivity_leak:
+        new_inactivity_score -= min(
+            INACTIVITY_SCORE_RECOVERY_RATE, new_inactivity_score
+        )
+
+    return new_inactivity_score
 ```
 
 ## Informal Proof Sketch
