@@ -1,0 +1,21 @@
+mv Concurrent_Ref_Alg Concurrent_Ref_Alg.sav
+mkdir Concurrent_Ref_Alg Concurrent_Ref_Alg/document
+cp -p \
+Refinement_Lattice.thy \
+Sequential.thy \
+Parallel.thy \
+Conjunction.thy \
+CRA.thy \
+Galois_Connections.thy \
+Iteration.thy \
+Conjunctive_Sequential.thy \
+Infimum_Nat.thy \
+Conjunctive_Iteration.thy \
+Rely_Quotient.thy \
+ROOT \
+Concurrent_Ref_Alg
+cp -p \
+document/root.bib \
+document/root.tex \
+Concurrent_Ref_Alg/document
+tar zchvf Concurrent_Ref_Alg.tar.gz Concurrent_Ref_Alg

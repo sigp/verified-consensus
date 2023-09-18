@@ -1,0 +1,20 @@
+chapter AFP
+
+session "Concurrent_Ref_Alg" (AFP) = "HOL" +
+  options [timeout = 600]
+  (*options [document = pdf, document_output = "output", quick_and_dirty]*)
+  (*options [document = pdf, document_output = "output", document_variants="document:outline=/proof", quick_and_dirty]*)
+  theories [document = false]
+    "~~/src/HOL/Library/Lattice_Syntax"
+  theories 
+    "Concurrent_Ref_Alg/Refinement_Lattice"
+    "Concurrent_Ref_Alg/Sequential"
+    "Concurrent_Ref_Alg/Parallel"
+    "Concurrent_Ref_Alg/Conjunction"
+    "Concurrent_Ref_Alg/CRA"
+    "Concurrent_Ref_Alg/Galois_Connections"
+    "Concurrent_Ref_Alg/Iteration"
+    "Concurrent_Ref_Alg/Rely_Quotient"
+ document_files
+    "root.tex"
+    "root.bib"

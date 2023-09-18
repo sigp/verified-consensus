@@ -1,0 +1,5 @@
+\<ocirc>                code: 0x00229a  group: operator
+\<ostar>                 code: 0x00229b  group: operator
+\<iinter>               code: 0x0022d2  group: operator  font: DejaVuSans
+\<ltort>              code: 0x0027ec  group: operator  font: DejaVuSans
+\<rtort>              code: 0x0027ed  group: operator  font: DejaVuSans

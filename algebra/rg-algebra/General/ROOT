@@ -1,0 +1,16 @@
+chapter AFP
+
+session "Concurrent_Ref_Alg" (AFP) = "HOL-Library" +
+  description \<open>Concurrent refinement algebra and rely quotient\<close>
+  (*options [timeout = 600]*)(* AFP version *)
+  (*options [document = pdf, document_output = "output", quick_and_dirty]*)
+  options [document = pdf, document_output = "output", document_variants="document:outline=/proof", quick_and_dirty]
+  theories [document = false]
+    "HOL-Library.Lattice_Syntax"
+  theories 
+    "Parallel_Big"
+    "Iteration_Liberation"
+    "Rely_Quotient"
+ document_files
+    "root.tex"
+    "root.bib"

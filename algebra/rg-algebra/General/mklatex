@@ -1,0 +1,12 @@
+/Applications/Isabelle2020.app/Isabelle/bin/isabelle build -D . -c -v
+open output/outline.pdf
+#open output/document.pdf
+
+find output/document -type f -name "*.tex" \
+    -exec sed -n -e '/\\providecommand{\\DefineSnippet}/n' \
+        -e '/\\newcommand{\\DefineSnippet}/n' \
+        -e '/\\newcommand{\\EndSnippet}/n' \
+        -e '/DefineSnippet/,/EndSnippet/p' {} + | \
+    sed -e 's/\\DefineSnippet{\([^}]*\)}/\\DefineSnippet{\1}{/' \
+        -e 's/\\EndSnippet/}\%EndSnippet/' \
+        -e 's/isasymhookrightarrow/isasymmapsto/g' > "snippets.sty"

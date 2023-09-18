@@ -1,0 +1,65 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{isabelle,isabellesym}
+% additional symbol fonts
+\usepackage{stmaryrd}
+\usepackage{amssymb}
+% this should be the last package used
+\usepackage{pdfsetup}
+
+% START Isabelle snippets
+%\usepackage{ifthen}
+% \newcommand{\DefineSnippet}[2]{%
+%   \expandafter\newcommand\csname snippet--#1\endcsname{%
+%     \begin{quote}
+%     \begin{isabelle}
+%     #2
+%     \end{isabelle}
+%     \end{quote}}}
+% \newcommand{\Snippet}[1]{%
+%   \ifcsname snippet--#1\endcsname{\csname snippet--#1\endcsname}%
+%   \else+++++++ERROR: Snippet ``#1 not defined+++++++ \fi}
+% display anything in a snip without any markup
+\providecommand{\DefineSnippet}[2]{#2}%endsnip
+%for now %\input{generated/snippets}
+% END Isabelle snippets
+
+\newcommand{\isasymiinter}{\isamath{\doublecap}}
+\newcommand{\isasymocirc}{\isamath{\circledcirc}}
+\newcommand{\isasymostar}{\isamath{\varoast}}
+\newcommand{\isasymltort}{\isamath{\llparenthesis}}
+\newcommand{\isasymrtort}{\isamath{\rrparenthesis}}
+
+\newcommand{\refsto} {\ensuremath{\sqsubseteq}}
+\newcommand{\nondet} {\ensuremath{\sqcap}}
+\newcommand{\pgm}{\pi}
+
+%\newcommand{\nondet}{\mathbin{\sqcap}}
+%\newcommand{\refsto}{\mathrel{\sqsubseteq}}
+
+% urls in roman style, theory text in math-similar italics
+\urlstyle{rm}
+\isabellestyle{it}
+
+
+\begin{document}
+
+\title{Concurrent Rely-Guarantee Algebra with Tests and Atomic Steps}
+\author{Callum Bannister \and Ian Hayes \and Thomas Manderson \and Larissa Meinicke \and
+       Patrick Meiring \and Joshua Morris \and Andrius Velykis \and Kirsten Winter}
+\maketitle
+
+\begin{abstract}
+This formal proof document is a companion to the thesis \emph{Reasoning about concurrent programs using a theorem prover} by Patrick Meiring. This documents contains the proofs for all laws described in the thesis, as well as all previously proven laws. It also contains a minimal copy of the uval theory by Simon Foster and Frank Zeyda.
+\end{abstract}
+
+\tableofcontents
+\parindent 0pt\parskip 0.5ex
+
+% generated text of all theories
+\input{session}
+
+\bibliographystyle{plain}
+\bibliography{root}
+
+\end{document}

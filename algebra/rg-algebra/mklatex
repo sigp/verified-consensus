@@ -1,0 +1,3 @@
+#/Applications/Isabelle2021.app/bin/isabelle build -D . -c 
+/Applications/Isabelle2021.app/bin/isabelle build -D . -c -v
+open output/document.pdf 
