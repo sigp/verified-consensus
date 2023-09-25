@@ -474,11 +474,21 @@ def process_epoch_single_pass(
             # Note: we may change the presentation of this mutation. Due to primitive types
             # being immutable in Python we cannot pass a mutable reference. Our Isabelle
             # formalisation will likely model the mutation natively (a write to the heap).
-            state.inactivity_scores[index] = process_single_inactivity_update(
+            inactivity_score = process_single_inactivity_update(
                 inactivity_score,
                 validator_info,
                 state_ctxt,
             )
+            state.inactivity_scores[index] = inactivity_score
+
+            balance = process_single_reward_and_penalty(
+                balance,
+                inactivity_score,
+                validator_info,
+                rewards_ctxt,
+                state_ctxt
+            )
+            state.balances[index] = balance
 ```
 
 ### Inactivity: `process_single_inactivity_update`
@@ -506,6 +516,85 @@ def process_single_inactivity_update(
         )
 
     return new_inactivity_score
+```
+
+### Rewards and Penalties: `process_single_reward_and_penalty`
+
+```python
+def process_single_reward_and_penalty(
+    balance: Gwei,
+    inactivity_score: uint64,
+    validator_info: ValidatorInfo,
+    rewards_ctxt: RewardsAndPenaltiesContext,
+    state_ctxt: StateContext,
+) -> uint64:
+    if not validator_info.is_eligible:
+        return balance
+
+    rewards = 0
+    penalties = 0
+
+    for flag_index in range(len(PARTICIPATION_FLAG_WEIGHTS)):
+        reward, penalty = get_flag_index_delta(
+            validator_info, flag_index, rewards_ctxt, state_ctxt
+        )
+        rewards += reward
+        penalties += penalty
+
+    reward, penalty = get_inactivity_penalty_delta(
+        validator_info,
+        inactivity_score,
+        state_ctxt,
+    )
+    rewards += reward
+    penalties += penalty
+
+    if rewards != 0 or penalties != 0:
+        new_balance = balance + rewards
+        new_balance = 0 if penalties > new_balance else new_balance - penalties
+        return new_balance
+    else:
+        return balance
+```
+
+```python
+def get_flag_index_delta(
+    validator_info: ValidatorInfo,
+    flag_index: int,
+    rewards_ctxt: RewardsAndPenaltiesContext,
+    state_ctxt: StateContext,
+) -> (Gwei, Gwei):
+    base_reward = validator_info.base_reward
+    weight = PARTICIPATION_FLAG_WEIGHTS[flag_index]
+    unslashed_participating_increments = (
+        rewards_ctxt.unslashed_participating_increments_array[flag_index]
+    )
+
+    if is_unslashed_participating_index(validator_info, flag_index):
+        if not state_ctxt.is_in_inactivity_leak:
+            reward_numerator = base_reward * weight * unslashed_participating_increments
+            reward_denominator = rewards_ctxt.active_increments * WEIGHT_DENOMINATOR
+            reward = reward_numerator / reward_denominator
+            return (reward, 0)
+    elif flag_index != TIMELY_HEAD_FLAG_INDEX:
+        penalty = base_reward * weight / WEIGHT_DENOMINATOR
+        return (0, penalty)
+    return (0, 0)
+```
+
+```python
+def get_inactivity_penalty_delta(
+    validator_info: ValidatorInfo,
+    inactivity_score: uint64,
+    state_ctxt: StateContext,
+) -> (Gwei, Gwei):
+    # Implementation note: could abstract over fork's inactivity penalty quotient here
+    if not is_unslashed_participating_index(TIMELY_TARGET_FLAG_INDEX):
+        penalty_numerator = validator_info.effective_balance * inactivity_score
+        penalty_denominator = INACTIVITY_SCORE_BIAS * INACTIVITY_PENALTY_QUOTIENT_BELLATRIX
+        penalty = penalty_numerator / penalty_denominator
+        return (0, penalty)
+    return (0, 0)
 ```
 
 ## Informal Proof Sketch
