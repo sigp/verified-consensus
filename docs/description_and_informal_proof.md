@@ -424,7 +424,7 @@ The function which fuses the loops for the stages is called `process_epoch_singl
 ```python
 def process_epoch_single_pass(
     state: BeaconState,
-    progressive_balances: ProgressiveBalancesCache
+    progressive_balances: ProgressiveBalancesCache,
 ) -> None:
     assert valid_progessive_balances(state, progressive_balances)
 
@@ -438,6 +438,15 @@ def process_epoch_single_pass(
     slashings_ctxt = new_slashings_context(state, state_ctxt)
     rewards_ctxt = new_rewards_and_penalties_context(progressive_balances)
     effective_balances_ctxt = new_effective_balances_ctxt()
+
+    # Determine the final activation queue.
+    activation_queue = get_validators_eligible_for_activation(
+        state.activation_queue,
+        state.finalized_checkpoint.epoch,
+        state_ctxt.churn_limit,
+    )
+    # Create a new speculative activation queue for next epoch.
+    next_epoch_activation_queue = ActivationQueue(eligible_validators=[])
 
     for (
         index,
@@ -489,6 +498,18 @@ def process_epoch_single_pass(
                 state_ctxt
             )
             state.balances[index] = balance
+
+        # TODO define exit cache
+        process_single_registry_update(
+            validator,
+            validator_info,
+            state.exit_cache,
+            activation_queue,
+            next_epoch_activation_queue,
+            state_ctxt,
+        )
+
+    state.activation_queue = next_epoch_activation_queue
 ```
 
 ### Inactivity: `process_single_inactivity_update`
@@ -595,6 +616,41 @@ def get_inactivity_penalty_delta(
         penalty = penalty_numerator / penalty_denominator
         return (0, penalty)
     return (0, 0)
+```
+
+## Registry Updates: `process_single_registry_update`
+
+```python
+def process_single_registry_update(
+    validator: Validator,
+    validator_info: ValidatorInfo,
+    exit_cache: ExitCache,
+    activation_queue: [ValidatorIndex],
+    next_epoch_activation_queue: ActivationQueue,
+    state_ctxt: StateContext,
+):
+    current_epoch = state_ctxt.current_epoch
+
+    if is_eligible_for_activation_queue(validator):
+        validator.activation_eligibility_epoch = current_epoch + 1
+
+    if (
+        is_active_validator(validator, current_epoch)
+        and validator.effective_balance <= EJECTION_BALANCE
+    ):
+        # TODO: define `initiate_validator_exit_fast` and exit cache
+        initiate_validator_exit_fast(validator, exit_cache, state_ctxt)
+
+    if validator_info.index in activation_queue:
+        validator.activation_epoch = compute_activation_exit_epoch(current_epoch)
+
+    # Caching: add to speculative activation queue for next epoch.
+    add_if_could_be_eligible_for_activation(
+        new_activation_queue,
+        validator_info.index,
+        validator,
+        state_ctxt.next_epoch,
+    )
 ```
 
 ## Informal Proof Sketch
