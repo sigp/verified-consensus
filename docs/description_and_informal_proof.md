@@ -419,6 +419,11 @@ def get_base_reward_per_increment_fast(
     )
 ```
 
+```
+def saturating_sub(x: uint64, y: uint64) -> uint64:
+    return 0 if y > x else x - y
+```
+
 The function which fuses the loops for the stages is called `process_epoch_single_pass`:
 
 ```python
@@ -509,6 +514,14 @@ def process_epoch_single_pass(
             state_ctxt,
         )
 
+        balance = process_single_slashing(
+            balance,
+            validator,
+            slashings_ctxt,
+            progressive_balances,
+        )
+        state.balances[index] = balance
+
     state.activation_queue = next_epoch_activation_queue
 ```
 
@@ -572,7 +585,7 @@ def process_single_reward_and_penalty(
 
     if rewards != 0 or penalties != 0:
         new_balance = balance + rewards
-        new_balance = 0 if penalties > new_balance else new_balance - penalties
+        new_balance = saturating_sub(new_balance, penalties)
         return new_balance
     else:
         return balance
@@ -651,6 +664,33 @@ def process_single_registry_update(
         validator,
         state_ctxt.next_epoch,
     )
+```
+
+## Slashings: `process_single_slashing`
+
+```python
+def process_single_slashing(
+    balance: Gwei,
+    validator: Validator,
+    slashings_ctxt: SlashingsContext,
+    progressive_balances: ProgressiveBalancesCache,
+) -> Gwei:
+    if (
+        validator.slashed
+        and slashings_ctxt.target_withdrawable_epoch == validator.withdrawable_epoch
+    ):
+        increment = EFFECTIVE_BALANCE_INCREMENT
+        penalty_numerator = (
+            validator.effective_balance
+            // increment
+            * slashings_ctxt.adjusted_total_slashing_balance
+        )
+        penalty = (
+            penalty_numerator // progressive_balances.total_active_balance * increment
+        )
+        return saturating_sub(balance, penalty)
+    else:
+        return balance
 ```
 
 ## Informal Proof Sketch
