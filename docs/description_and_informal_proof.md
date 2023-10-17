@@ -168,6 +168,65 @@ def get_progressive_balances(state):
     ...
 ```
 
+To update the progressive balances cache for the next epoch we use two functions. The first is
+responsible for partly initializing a new cache for the next epoch:
+
+```python
+def new_next_epoch_progressive_balances(
+    progressive_balances: ProgressiveBalancesCache,
+) -> ProgressiveBalancesCache:
+    # Set total active balance to 0, it will be updated in
+    # `process_single_effective_balance_update`.
+    total_active_balance = 0
+
+    # Rotate current epoch to previous, and initialize current to 0.
+    previous_epoch_flag_attesting_balances = (
+        progressive_balances.current_epoch_flag_attesting_balances
+    )
+    current_epoch_flag_attesting_balances = [0, 0, 0]
+
+    return ProgressiveBalancesCache(
+        total_active_balance=total_active_balance,
+        previous_epoch_flag_attesting_balances=previous_epoch_flag_attesting_balances,
+        current_epoch_flag_attesting_balances=current_epoch_flag_attesting_balances,
+    )
+```
+
+The second function is responsible for updating the next epoch cache for changes in effective
+balance during the current epoch transition:
+
+```
+def update_next_epoch_progressive_balances(
+    next_epoch: Epoch,
+    next_epoch_progressive_balances: ProgressiveBalancesCache,
+    validator: Validator,
+    current_epoch_participation: ParticipationFlags,
+    old_effective_balance: uint64,
+):
+    new_effective_balance = validator.effective_balance
+
+    # Update total active balance.
+    if is_active_validator(validator, next_epoch):
+        next_epoch_progressive_balances.total_active_balance += new_effective_balance
+
+    # Update the current epoch totals which are the *previous* epoch totals in the cache
+    # and were computed with the validator's `old_effective_balance`.
+    # Slashed validators are not part of the unslashed participating totals.
+    if validator.slashed:
+        return
+
+    for flag_index in range(len(participation_flag_weights)):
+        if has_flag(current_epoch_participation, flag_index):
+            if new_effective_balance > old_effective_balance:
+                next_epoch_progressive_balances.previous_epoch_flag_attesting_balances[
+                    flag_index
+                ] += (new_effective_balance - old_effective_balance)
+            else:
+                next_epoch_progressive_balances.previous_epoch_flag_attesting_balances[
+                    flag_index
+                ] -= (old_effective_balance - new_effective_balance)
+```
+
 ## Activation Queue
 
 Another aggregate computation requiring special consideration is the calculation of the activation
@@ -443,6 +502,7 @@ def process_epoch_single_pass(
     slashings_ctxt = new_slashings_context(state, state_ctxt)
     rewards_ctxt = new_rewards_and_penalties_context(progressive_balances)
     effective_balances_ctxt = new_effective_balances_ctxt()
+    next_epoch_progressive_balances = new_next_epoch_progressive_balances(progressive_balances)
 
     # Determine the final activation queue.
     activation_queue = get_validators_eligible_for_activation(
@@ -521,6 +581,15 @@ def process_epoch_single_pass(
             progressive_balances,
         )
         state.balances[index] = balance
+
+        process_single_effective_balance_update(
+            balance,
+            validator,
+            validator_info,
+            next_epoch_progressive_balances,
+            effective_balances_ctxt,
+            state_ctxt,
+        )
 
     state.activation_queue = next_epoch_activation_queue
 ```
@@ -691,6 +760,38 @@ def process_single_slashing(
         return saturating_sub(balance, penalty)
     else:
         return balance
+```
+
+## Effective Balances: `process_single_effective_balance_update`
+
+```python
+def process_single_effective_balance_update(
+    balance: Gwei,
+    validator: Validator,
+    validator_info: ValidatorInfo,
+    next_epoch_progressive_balances: ProgressiveBalancesCache,
+    eb_ctxt: EffectiveBalancesContext,
+    state_ctxt: StateContext,
+):
+    # Compute the effective balance change.
+    balance = state.balances[index]
+    if (
+        balance + eb_ctxt.downward_threshold < validator.effective_balance
+        or validator.effective_balance + eb_ctxt.upward_threshold < balance
+    ):
+        validator.effective_balance = min(
+            balance - balance % EFFECTIVE_BALANCE_INCREMENT, MAX_EFFECTIVE_BALANCE
+        )
+
+    # Update the progressive balances cache for the next epoch.
+    update_next_epoch_progressive_balances(
+        state_ctxt.next_epoch,
+        next_epoch_progressive_balances,
+        validator,
+        current_epoch_participation,
+        validator_info.effective_balance,
+    )
+    # TODO: epoch cache?
 ```
 
 ## Informal Proof Sketch
