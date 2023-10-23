@@ -317,6 +317,94 @@ def get_validators_eligible_for_activation(
     ][:churn_limit]
 ```
 
+## Exit Cache
+
+We define an exit cache to remove the calculation of the `exit_epochs` in `initiate_validator_exit`.
+
+Like the progressive balances cache, we define the cache and assume that it is
+correctly initialised at the start of epoch processing.
+
+```python
+class ExitCache:
+    exit_epoch_counts: dict[Epoch, uint64]
+```
+
+```python
+def new_exit_cache(state: BeaconState) -> ExitCache:
+    exit_cache = ExitCache(exit_epoch_counts={})
+    for validator in state.validators:
+        if validator.exit_epoch != FAR_FUTURE_EPOCH:
+            record_validator_exit(exit_cache, validator.exit_epoch)
+    return exit_cache
+```
+
+```python
+def valid_exit_cache(state: BeaconState, exit_cache: ExitCache) -> bool:
+    return exit_cache == new_exit_cache(state)
+```
+
+```python
+def get_exit_cache(state: BeaconState) -> ExitCache:
+    # Get exit cache from state or compute in a single iteration.
+    # [ASSUMED]
+    ...
+```
+
+Exits that occur during epoch processing are used to update the cache:
+
+```python
+def record_validator_exit(exit_cache: ExitCache, exit_epoch: Epoch):
+    if exit_epoch in exit_cache.exit_epoch_counts:
+        exit_cache.exit_epoch_counts[exit_epoch] += 1
+    else:
+        exit_cache.exit_epoch_counts[exit_epoch] = 1
+```
+
+Two accessors provide aggregated data for `initiative_validator_exit`:
+
+```python
+def get_max_exit_epoch(exit_cache: ExitCache) -> Epoch:
+    if len(exit_cache.exit_epoch_counts) == 0:
+        return 0
+    else:
+        return max(exit_cache.exit_epoch_counts.keys())
+```
+
+```python
+def get_exit_queue_churn(exit_cache: ExitCache, exit_queue_epoch: Epoch) -> uint64:
+    return exit_cache.exit_epoch_counts.get(exit_queue_epoch) or 0
+```
+
+The `initiate_validator_exit` function is updated to use the exit cache:
+
+```python
+def initiate_validator_exit_fast(
+    validator: Validator, exit_cache: ExitCache, state_ctxt: StateContext
+):
+    # Return if validator already initiated exit
+    if validator.exit_epoch != FAR_FUTURE_EPOCH:
+        return
+
+    # Compute exit queue epoch
+    max_exit_epoch_from_cache = get_max_exit_epoch(exit_cache)
+    exit_queue_epoch = max(
+        max_exit_epoch_from_cache,
+        compute_activation_exit_epoch(state_ctxt.current_epoch),
+    )
+    exit_queue_churn = get_exit_queue_churn(exit_cache, exit_queue_epoch)
+    if exit_queue_churn >= state_ctxt.churn_limit:
+        exit_queue_epoch += Epoch(1)
+
+    # Set validator exit epoch and withdrawable epoch
+    validator.exit_epoch = exit_queue_epoch
+    validator.withdrawable_epoch = Epoch(
+        validator.exit_epoch + MIN_VALIDATOR_WITHDRAWABILITY_DELAY
+    )
+
+    # Update cache
+    record_validator_exit(exit_cache, exit_queue_epoch)
+```
+
 ## Epoch Cache
 
 TODO
@@ -327,13 +415,14 @@ TODO
 def process_epoch(state: BeaconState) -> None:
     # Compute (or fetch) the aggregates computed over the entire validator set.
     progressive_balances = get_progressive_balances(state)
+    exit_cache = get_exit_cache(state)
 
     # [CHANGED] Use the aggregate sums to compute justification and finalization.
     process_justification_and_finalization(state, progressive_balances)
 
     # [CHANGED] Compute the majority of processing in a single iteration, utilising the progressive
     # balances for aggregates.
-    process_epoch_single_pass(state, progressive_balances)
+    process_epoch_single_pass(state, progressive_balances, exit_cache)
 
     # [CHANGED] Reorder `process_slashings` and `process_eth1_data_reset` after
     # `process_effective_balances` which is now part of `process_epoch_single_pass`.
@@ -489,8 +578,10 @@ The function which fuses the loops for the stages is called `process_epoch_singl
 def process_epoch_single_pass(
     state: BeaconState,
     progressive_balances: ProgressiveBalancesCache,
+    exit_cache: ExitCache,
 ) -> None:
     assert valid_progessive_balances(state, progressive_balances)
+    assert valid_exit_cache(state, exit_cache)
 
     # TODO: need active indices cache to eliminate loop in `get_validator_churn_limit`
     state_ctxt = StateContext(
@@ -564,11 +655,10 @@ def process_epoch_single_pass(
             )
             state.balances[index] = balance
 
-        # TODO define exit cache
         process_single_registry_update(
             validator,
             validator_info,
-            state.exit_cache,
+            exit_cache,
             activation_queue,
             next_epoch_activation_queue,
             state_ctxt,
@@ -720,7 +810,6 @@ def process_single_registry_update(
         is_active_validator(validator, current_epoch)
         and validator.effective_balance <= EJECTION_BALANCE
     ):
-        # TODO: define `initiate_validator_exit_fast` and exit cache
         initiate_validator_exit_fast(validator, exit_cache, state_ctxt)
 
     if validator_info.index in activation_queue:
