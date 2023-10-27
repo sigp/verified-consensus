@@ -100,6 +100,39 @@ The activation queue also requires aggregation over the entire validator set, an
 two-phase process for this aggregation which is computed over two subsequent `process_epoch` calls.
 See the _Activation Queue_ section below.
 
+## Modified `BeaconState`
+
+We model the additional caches as fields of the `BeaconState`. These fields should be treated
+differently from non-cache `BeaconState` fields, e.g. excluded from SSZ serialization and tree
+hashing. Alternatively, implementations may wish to pass the caches around in a separate object.
+
+```python
+class BeaconState:
+    # ... ordinary `BeaconState` fields ...
+
+    # Balance sums for active validators & attestation participation flags.
+    progressive_balances: ProgressiveBalancesCache,
+
+    # Cache of validators that *could* be activated soon.
+    activation_queue: ActivationQueue,
+
+    # Cache of exits indexed by exit epoch.
+    exit_cache: ExitCache,
+
+    # Cache of base rewards and effective balances.
+    base_reward_cache: BaseRewardCache,
+
+    # Number of active validators in the current epoch.
+    num_active_validators: uint64
+
+During the course of epoch processing the caches are updated for the next epoch. When describing our
+optimised epoch processing as "single-pass" we exclude the iterations required to build the caches
+for the first time, because this is a one-off cost.
+
+In the specification below we use computationally expensive predicates to assert the validity
+of the caches. These predicates are not intended to be included in implementations, and our proofs
+demonstrate that they hold over successive `process_epoch` calls.
+
 ## Progressive Balances Cache
 
 We define the progressive balances cache as a structure holding the 7 aggregate balances like so:
@@ -115,33 +148,6 @@ class ProgressiveBalancesCache:
     current_epoch_flag_attesting_balances: List[Gwei, 3],
 ```
 
-The correct values of the progressive balances cache are defined by the `valid_progressive_balances`
-predicate:
-
-```python
-def get_flag_attesting_balance(state: BeaconState, flag_index: int, epoch: Epoch) -> Gwei:
-    return get_total_balance(state, get_unslashed_participating_indices(state, flag_index, epoch))
-
-def valid_progressive_balances(
-    state: BeaconState,
-    p: ProgressiveBalancesCache
-) -> Bool:
-    previous_epoch = get_previous_epoch(state)
-    current_epoch = get_current_epoch(state)
-
-    return p.total_active_balance == get_total_active_balance(state) and
-        p.previous_epoch_flag_attesting_balances == [
-            get_flag_attesting_balance(state, TIMELY_SOURCE_FLAG_INDEX, previous_epoch),
-            get_flag_attesting_balance(state, TIMELY_TARGET_FLAG_INDEX, previous_epoch),
-            get_flag_attesting_balance(state, TIMELY_HEAD_FLAG_INDEX, previous_epoch)
-        ] and
-        p.current_epoch_flag_attesting_balances == [
-            get_flag_attesting_balance(state, TIMELY_SOURCE_FLAG_INDEX, current_epoch),
-            get_flag_attesting_balance(state, TIMELY_TARGET_FLAG_INDEX, current_epoch),
-            get_flag_attesting_balance(state, TIMELY_HEAD_FLAG_INDEX, current_epoch)
-        ]
-```
-
 Since changes were made to fork choice to handle unrealised justification and finalization
 (see [disclosure][fc_pull_tips_disc]), consensus clients need to run
 `process_justification_and_finalization` after _every_ block. To do this efficiently, many of them
@@ -149,24 +155,48 @@ include a cache that is equivalent to the progressive balances cache. This cache
 _progressive_ because it computes the aggregate sums incrementally, updating them after relevant
 events in each block.
 
+We define a helper function for calculations involving progressive balances:
+
+```python
+def get_flag_attesting_balance(state: BeaconState, flag_index: int, epoch: Epoch) -> Gwei:
+    return get_total_balance(state, get_unslashed_participating_indices(state, flag_index, epoch))
+```
+
+A new cache may be initialized using `new_progressive_balances`:
+
+```python
+def new_progressive_balances(state: BeaconState) -> ProgressiveBalancesCache:
+    total_active_balance = get_total_active_balance(state)
+    previous_epoch_flag_attesting_balances = [
+        get_flag_attesting_balance(state, TIMELY_SOURCE_FLAG_INDEX, previous_epoch),
+        get_flag_attesting_balance(state, TIMELY_TARGET_FLAG_INDEX, previous_epoch),
+        get_flag_attesting_balance(state, TIMELY_HEAD_FLAG_INDEX, previous_epoch),
+    ]
+    current_epoch_flag_attesting_balances = [
+        get_flag_attesting_balance(state, TIMELY_SOURCE_FLAG_INDEX, current_epoch),
+        get_flag_attesting_balance(state, TIMELY_TARGET_FLAG_INDEX, current_epoch),
+        get_flag_attesting_balance(state, TIMELY_HEAD_FLAG_INDEX, current_epoch),
+    ]
+    return ProgressiveBalancesCache(
+        total_active_balance=total_active_balance,
+        previous_epoch_flag_attesting_balances=previous_epoch_flag_attesting_balances,
+        current_epoch_flag_attesting_balances=current_epoch_flag_attesting_balances,
+    )
+```
+
+The correct values of the progressive balances cache are defined by the `valid_progressive_balances`
+predicate:
+
+```python
+def valid_progressive_balances(
+    state: BeaconState,
+) -> bool:
+    return state.progressive_balances == new_progressive_balances(state)
+```
+
 Although in future work we may prove the correctness of a progressive balance cache implementation,
-in this formalisation of `process_epoch` we assume that there exists _some_ function called
-`get_progressive_balances` which satisfies:
-
-```python
-valid_progressive_balances(state, get_progressive_balances(state)) == True
-```
-
-Implementations may choose to use an existing progressive balances cache if they have one,
-or can compute one anew in a single iteration, bringing the total number of $O(n)$ iterations in
-epoch processing to 2.
-
-```python
-def get_progressive_balances(state):
-    # Get cached balances from state or compute in a single iteration.
-    # [ASSUMED]
-    ...
-```
+in this formalisation of `process_epoch` we assume that the cache is initialized correctly at the
+start of epoch processing.
 
 To update the progressive balances cache for the next epoch we use two functions. The first is
 responsible for partly initializing a new cache for the next epoch:
@@ -302,6 +332,13 @@ def new_activation_queue(
     return activation_queue
 ```
 
+The validity condition for the activation queue is:
+
+```python
+def valid_activation_queue(state: BeaconState) -> bool:
+    return state.activation_queue == new_activation_queue(state)
+```
+
 During epoch processing for epoch $N$, the speculative queue is restricted based
 on the true finalized epoch and the churn limit:
 
@@ -322,7 +359,7 @@ def get_validators_eligible_for_activation(
 We define an exit cache to remove the calculation of the `exit_epochs` in `initiate_validator_exit`.
 
 Like the progressive balances cache, we define the cache and assume that it is
-correctly initialised at the start of epoch processing.
+correctly initialized at the start of epoch processing.
 
 ```python
 class ExitCache:
@@ -339,15 +376,8 @@ def new_exit_cache(state: BeaconState) -> ExitCache:
 ```
 
 ```python
-def valid_exit_cache(state: BeaconState, exit_cache: ExitCache) -> bool:
-    return exit_cache == new_exit_cache(state)
-```
-
-```python
-def get_exit_cache(state: BeaconState) -> ExitCache:
-    # Get exit cache from state or compute in a single iteration.
-    # [ASSUMED]
-    ...
+def valid_exit_cache(state: BeaconState) -> bool:
+    return state.exit_cache == new_exit_cache(state)
 ```
 
 Exits that occur during epoch processing are used to update the cache:
@@ -414,7 +444,7 @@ included in our formalisation of epoch processing for future-proofing, and to re
 between practical implementations and this spec.
 
 ```python
-class EpochCache:
+class BaseRewardCache:
     # Effective balances indexed by validator index.
     # NOTE: this is redundant, but useful for block processing with tree-based states
     effective_balances: [uint64]
@@ -422,62 +452,92 @@ class EpochCache:
     base_rewards: [uint64]
 ```
 
+The functions for initializing a new epoch cache depend on a correctly initialized progressive
+balance cache:
+
 ```python
-def new_epoch_cache(
-    state: BeaconState, progressive_balances: ProgressiveBalancesCache
-) -> EpochCache:
-    effective_balances = [validator.effective_balance for validator in state.validators]
-    base_rewards = [
-        get_base_reward_fast(effective_balance, progressive_balances)
+def compute_base_rewards(state: BeaconState) -> [uint64]:
+    return [
+        get_base_reward_fast(effective_balance, state.progressive_balances)
         for effective_balance in range(
             0,
             MAX_EFFECTIVE_BALANCE + EFFECTIVE_BALANCE_INCREMENT,
             EFFECITVE_BALANCE_INCREMENT,
         )
     ]
-    return EpochCache(effective_balances=effective_balances, base_rewards=base_rewards)
 ```
 
 ```python
-def valid_epoch_cache(
-    state: BeaconState,
-    epoch_cache: EpochCache,
-    progressive_balances: ProgressiveBalancesCache,
-) -> bool:
-    return epoch_cache == new_epoch_cache(state, progressive_balances)
+def new_base_reward_cache(
+    state: BeaconState
+) -> BaseRewardCache:
+    effective_balances = [validator.effective_balance for validator in state.validators]
+    base_rewards = compute_base_rewards(state)
+    return BaseRewardCache(effective_balances=effective_balances, base_rewards=base_rewards)
 ```
+
+```python
+def valid_base_reward_cache(
+    state: BeaconState,
+) -> bool:
+    return state.base_reward_cache == new_base_reward_cache(state)
+```
+
+The function to read base rewards from the cache is:
 
 ```python
 def get_cached_base_reward(
-    epoch_cache: EpochCache, validator_index: ValidatorIndex
+    base_reward_cache: BaseRewardCache, validator_index: ValidatorIndex
 ) -> uint64:
     effective_balance_eth = (
-        epoch_cache.effective_balances[validator_index] // EFFECTIVE_BALANCE_INCREMENT
+        base_reward_cache.effective_balances[validator_index] // EFFECTIVE_BALANCE_INCREMENT
     )
-    return epoch_cache.base_rewards[effective_balance_eth]
+    return base_reward_cache.base_rewards[effective_balance_eth]
 ```
 
+### Num Active Validators
+
+Many implementations already cache the number of active validators. We define it as:
+
 ```python
-def get_epoch_cache(state: BeaconState) -> EpochCache:
-    # Get epoch cache from state or compute in a single iteration.
-    # [ASSUMED]
-    ...
+def new_num_active_validators(state: BeaconState) -> uint64:
+    return len(get_active_validator_indices(state, get_current_epoch(state)))
 ```
 
-### Overview for `process_epoch`
+The validity predicate is:
 
 ```python
-def process_epoch(state: BeaconState) -> None:
-    # Compute (or fetch) the aggregates computed over the entire validator set.
-    progressive_balances = get_progressive_balances(state)
-    exit_cache = get_exit_cache(state)
+def valid_num_active_validators(state: BeaconState) -> bool:
+    return state.num_active_validators == new_num_active_validators(state)
+```
+
+We use this value to calculate the churn limit, avoiding the $O(n)$ iteration for
+`get_active_validator_indices`:
+
+```python
+def get_validator_churn_limit_fast(state: BeaconState) -> uint64:
+    return max(
+        MIN_PER_EPOCH_CHURN_LIMIT, state.num_active_validators // CHURN_LIMIT_QUOTIENT
+    )
+```
+
+### Overview for `process_epoch_fast`
+
+```python
+def process_epoch_fast(state: BeaconState) -> None:
+    # Pre-conditions (not intended to be executed by implementations).
+    assert valid_progressive_balances(state)
+    assert valid_activation_queue(state)
+    assert valid_exit_cache(state)
+    assert valid_base_reward_cache(state)
+    assert valid_num_active_validators(state)
 
     # [CHANGED] Use the aggregate sums to compute justification and finalization.
-    process_justification_and_finalization(state, progressive_balances)
+    process_justification_and_finalization_fast(state)
 
     # [CHANGED] Compute the majority of processing in a single iteration, utilising the progressive
     # balances for aggregates.
-    process_epoch_single_pass(state, progressive_balances, exit_cache)
+    process_epoch_single_pass(state)
 
     # [CHANGED] Reorder `process_slashings` and `process_eth1_data_reset` after
     # `process_effective_balances` which is now part of `process_epoch_single_pass`.
@@ -490,6 +550,30 @@ def process_epoch(state: BeaconState) -> None:
     process_historical_summaries_update(state)
     process_participation_flag_updates(state)
     process_sync_committee_updates(state)
+```
+
+### Modified justification and finalization processing
+
+Calculation of justification and finalization is updated to use the progressive balances cache:
+
+```python
+def process_justification_and_finalization_fast(state: BeaconState) -> None:
+    if get_current_epoch(state) <= GENESIS_EPOCH + 1:
+        return
+    total_active_balance = state.progressive_balances.total_active_balance
+    previous_target_balance = (
+        state.progressive_balances.previous_epoch_flag_attesting_balances[
+            TIMELY_TARGET_FLAG_INDEX
+        ]
+    )
+    current_target_balance = (
+        state.progressive_balances.current_epoch_flag_attesting_balances[
+            TIMELY_TARGET_FLAG_INDEX
+        ]
+    )
+    weigh_justification_and_finalization(
+        state, total_active_balance, previous_target_balance, current_target_balance
+    )
 ```
 
 ### Single-pass epoch processing `process_epoch_single_pass`
@@ -541,7 +625,7 @@ class EffectiveBalancesContext:
     upward_threshold: uint64,
 ```
 
-We define initialisers for these contexts:
+We define initializers for these contexts:
 
 ```python
 def new_slashings_context(
@@ -613,7 +697,7 @@ def get_base_reward_fast(
 
 
 def get_base_reward_per_increment_fast(
-    progressive_balances: ProgressiveBalances,
+    progressive_balances: ProgressiveBalancesCache,
 ) -> Gwei:
     return Gwei(
         EFFECTIVE_BALANCE_INCREMENT
@@ -632,20 +716,14 @@ The function which fuses the loops for the stages is called `process_epoch_singl
 ```python
 def process_epoch_single_pass(
     state: BeaconState,
-    progressive_balances: ProgressiveBalancesCache,
-    exit_cache: ExitCache,
-    epoch_cache: EpochCache,
 ) -> None:
-    assert valid_progessive_balances(state, progressive_balances)
-    assert valid_exit_cache(state, exit_cache)
-    assert valid_epoch_cache(state, epoch_cache, progressive_balances)
+    progressive_balances = state.progressive_balances
 
-    # TODO: need active indices cache to eliminate loop in `get_validator_churn_limit`
     state_ctxt = StateContext(
         current_epoch=get_current_epoch(state),
         next_epoch=get_current_epoch(state) + 1,
         is_in_inactivity_leak=is_in_inactivity_leak(state),
-        churn_limit=get_validator_churn_limit(state),
+        churn_limit=get_validator_churn_limit_fast(state),
     )
     slashings_ctxt = new_slashings_context(state, state_ctxt)
     rewards_ctxt = new_rewards_and_penalties_context(progressive_balances)
@@ -660,6 +738,10 @@ def process_epoch_single_pass(
     )
     # Create a new speculative activation queue for next epoch.
     next_epoch_activation_queue = ActivationQueue(eligible_validators=[])
+    # Create a new base reward cache for next epoch.
+    next_epoch_base_reward_cache = BaseRewardCache(effective_balances=[], base_rewards=[])
+    # Track the number of active validators for the next epoch.
+    next_epoch_num_active_validators = 0
 
     for (
         index,
@@ -684,7 +766,7 @@ def process_epoch_single_pass(
         validator_info = ValidatorInfo(
             index=index,
             effective_balance=validator.effective_balance,
-            base_reward=get_cached_base_reward(epoch_cache, index),
+            base_reward=get_cached_base_reward(base_reward_cache, index),
             is_eligible=is_eligible,
             is_active_current_epoch=is_active_current_epoch,
             is_active_previous_epoch=is_active_previous_epoch,
@@ -715,7 +797,7 @@ def process_epoch_single_pass(
         process_single_registry_update(
             validator,
             validator_info,
-            exit_cache,
+            state.exit_cache,
             activation_queue,
             next_epoch_activation_queue,
             state_ctxt,
@@ -738,7 +820,19 @@ def process_epoch_single_pass(
             state_ctxt,
         )
 
+        # Update num active validators.
+        if is_active_next_epoch(validator, next_epoch):
+            next_epoch_num_active_validators += 1
+
+    # Update caches for next epoch.
+    state.progressive_balances = next_epoch_progressive_balances
     state.activation_queue = next_epoch_activation_queue
+
+    # Compute base reward cache after updating progressive balance cache.
+    next_epoch_base_reward_cache.base_rewards = compute_base_rewards(state)
+    state.base_reward_cache = next_epoch_base_reward_cache
+
+    state.num_active_validators = next_epoch_num_active_validators
 ```
 
 ### Inactivity: `process_single_inactivity_update`
@@ -916,6 +1010,7 @@ def process_single_effective_balance_update(
     validator: Validator,
     validator_info: ValidatorInfo,
     next_epoch_progressive_balances: ProgressiveBalancesCache,
+    next_epoch_base_reward_cache: BaseRewardCache,
     eb_ctxt: EffectiveBalancesContext,
     state_ctxt: StateContext,
 ):
@@ -937,7 +1032,8 @@ def process_single_effective_balance_update(
         current_epoch_participation,
         validator_info.effective_balance,
     )
-    # TODO: epoch cache?
+    # Add the validator's effective balance to the base reward cache.
+    next_epoch_base_reward_cache.append(validator.effective_balance)
 ```
 
 ## Informal Proof Sketch
