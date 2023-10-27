@@ -407,7 +407,62 @@ def initiate_validator_exit_fast(
 
 ## Epoch Cache
 
-TODO
+We use a cache called the epoch cache to persist values that are constant for the duration of an
+epoch, and remain constant until the recalculation of effective balances in
+`process_effective_balance_updates`. The cache is mainly useful for block processing, but is
+included in our formalisation of epoch processing for future-proofing, and to reduce the difference
+between practical implementations and this spec.
+
+```python
+class EpochCache:
+    # Effective balances indexed by validator index.
+    # NOTE: this is redundant, but useful for block processing with tree-based states
+    effective_balances: [uint64]
+    # Base rewards indexed by effective balance in ETH (i.e. divided by the increment).
+    base_rewards: [uint64]
+```
+
+```python
+def new_epoch_cache(
+    state: BeaconState, progressive_balances: ProgressiveBalancesCache
+) -> EpochCache:
+    effective_balances = [validator.effective_balance for validator in state.validators]
+    base_rewards = [
+        get_base_reward_fast(effective_balance, progressive_balances)
+        for effective_balance in range(
+            0,
+            MAX_EFFECTIVE_BALANCE + EFFECTIVE_BALANCE_INCREMENT,
+            EFFECITVE_BALANCE_INCREMENT,
+        )
+    ]
+    return EpochCache(effective_balances=effective_balances, base_rewards=base_rewards)
+```
+
+```python
+def valid_epoch_cache(
+    state: BeaconState,
+    epoch_cache: EpochCache,
+    progressive_balances: ProgressiveBalancesCache,
+) -> bool:
+    return epoch_cache == new_epoch_cache(state, progressive_balances)
+```
+
+```python
+def get_cached_base_reward(
+    epoch_cache: EpochCache, validator_index: ValidatorIndex
+) -> uint64:
+    effective_balance_eth = (
+        epoch_cache.effective_balances[validator_index] // EFFECTIVE_BALANCE_INCREMENT
+    )
+    return epoch_cache.base_rewards[effective_balance_eth]
+```
+
+```python
+def get_epoch_cache(state: BeaconState) -> EpochCache:
+    # Get epoch cache from state or compute in a single iteration.
+    # [ASSUMED]
+    ...
+```
 
 ### Overview for `process_epoch`
 
@@ -579,14 +634,16 @@ def process_epoch_single_pass(
     state: BeaconState,
     progressive_balances: ProgressiveBalancesCache,
     exit_cache: ExitCache,
+    epoch_cache: EpochCache,
 ) -> None:
     assert valid_progessive_balances(state, progressive_balances)
     assert valid_exit_cache(state, exit_cache)
+    assert valid_epoch_cache(state, epoch_cache, progressive_balances)
 
     # TODO: need active indices cache to eliminate loop in `get_validator_churn_limit`
     state_ctxt = StateContext(
         current_epoch=get_current_epoch(state),
-        next_epoch=get_current_epcoch(state) + 1,
+        next_epoch=get_current_epoch(state) + 1,
         is_in_inactivity_leak=is_in_inactivity_leak(state),
         churn_limit=get_validator_churn_limit(state),
     )
@@ -627,7 +684,7 @@ def process_epoch_single_pass(
         validator_info = ValidatorInfo(
             index=index,
             effective_balance=validator.effective_balance,
-            base_reward=get_base_reward_fast(validator.effective_balance, progressive_balances),
+            base_reward=get_cached_base_reward(epoch_cache, index),
             is_eligible=is_eligible,
             is_active_current_epoch=is_active_current_epoch,
             is_active_previous_epoch=is_active_previous_epoch,
