@@ -34,7 +34,7 @@ processing in the Deneb fork.
 
 As the validator set grows the amount of computation required to process blocks and states
 increases. If the algorithms from [consensus-specs][] were to be used as-is, the running time of
-`process_epoch` would be increasing quadratically ($O(n^2)$) as validators are added.
+`process_epoch` would be increasing quadratically $(O(n^2))$ as validators are added.
 
 Another motivation for optimising epoch processing is that it grants implementations the freedom to
 explore different state models. Some clients have already switched their `BeaconState`
@@ -80,7 +80,8 @@ aggregate information.
 The data dependencies between fields are such that the updated values of
 `.validators`/`.balances`/`.inactivity_scores` for the $i$-th validator can be computed _mostly_
 from the previous values for the $i$-validator. In other words, without dependence on the values
-for other validators. This is the primary reason that we are able to
+for other validators. This is the primary reason that we are able to fuse multiple mutations into
+a single loop iteration.
 
 The exception to this are the aggregate values which are computed over the entire validator set and
 fed into the calculations for each individual validator.
@@ -99,6 +100,9 @@ aggregates happens as part of the _Progressive Balances Cache_ described below.
 The activation queue also requires aggregation over the entire validator set, and we have a
 two-phase process for this aggregation which is computed over two subsequent `process_epoch` calls.
 See the _Activation Queue_ section below.
+
+Other aggregate values include the `churn_limit`, the exit queue, and the base rewards, which are
+derived from other caches described below (see _Exit Cache_, _Base Reward Cache_ below).
 
 ## Modified `BeaconState`
 
@@ -124,6 +128,7 @@ class BeaconState:
 
     # Number of active validators in the current epoch.
     num_active_validators: uint64
+```
 
 During the course of epoch processing the caches are updated for the next epoch. When describing our
 optimised epoch processing as "single-pass" we exclude the iterations required to build the caches
@@ -225,7 +230,7 @@ def new_next_epoch_progressive_balances(
 The second function is responsible for updating the next epoch cache for changes in effective
 balance during the current epoch transition:
 
-```
+```python
 def update_next_epoch_progressive_balances(
     next_epoch: Epoch,
     next_epoch_progressive_balances: ProgressiveBalancesCache,
@@ -435,7 +440,7 @@ def initiate_validator_exit_fast(
     record_validator_exit(exit_cache, exit_queue_epoch)
 ```
 
-## Epoch Cache
+## Base Reward Cache
 
 We use a cache called the epoch cache to persist values that are constant for the duration of an
 epoch, and remain constant until the recalculation of effective balances in
@@ -706,7 +711,7 @@ def get_base_reward_per_increment_fast(
     )
 ```
 
-```
+```python
 def saturating_sub(x: uint64, y: uint64) -> uint64:
     return 0 if y > x else x - y
 ```
