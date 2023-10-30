@@ -544,9 +544,8 @@ def process_epoch_fast(state: BeaconState) -> None:
     # balances for aggregates.
     process_epoch_single_pass(state)
 
-    # [CHANGED] Reorder `process_slashings` and `process_eth1_data_reset` after
-    # `process_effective_balances` which is now part of `process_epoch_single_pass`.
-    process_slashings(state)
+    # [CHANGED] Reorder `process_eth1_data_reset` after `process_effective_balances` which is now
+    # part of `process_epoch_single_pass`.
     process_eth1_data_reset(state)
 
     # [UNCHANGED] These functions are unaffacted.
@@ -1068,12 +1067,12 @@ epoch's previous justified epoch (at most $N - 2$ due to this value being set fr
 **Lemma `active_indices_fixed`:** The value of `get_active_validator_indices(state, N)` is the
 same for all intermediate values of `state` during epoch processing at the end of epoch `N`.
 
-**Proof:** TODO
+**Proof:** TODO: aux lemma
 
 **Lemma `prev_active_indices_fixed`:** The value of `get_active_validator_indices(state, N - 1)` is
 the same for all intermediate values of `state` during epoch processing at the end of epoch `N`.
 
-**Proof:** TODO
+**Proof:** TODO: aux lemma
 
 **Lemma `total_active_balance_fixed`:** During epoch processing at the end of epoch $N$,
 the value of `get_total_active_balance(state, N)` is fixed for all intermediate states prior to
@@ -1100,6 +1099,59 @@ execution of `process_justification_and_finalization`.
 **Proof:** The inactivity leak calculation depends on the previous epoch, which is fixed
 for the given states (the `slot` being constant). Additionally it depends on the finalized epoch,
 which can only change as part of `process_justification_and_finalization`.
+
+**Lemma `is_eligible_fixed`**: For all intermediate states during epoch processing prior to `process_registry_updates` each validator's eligibility is equal
+to the cached eligibility from the `ValidatorInfo`, i.e. `i in get_eligible_validator_indices(state) == validator_info_i.is_eligible`.
+
+**Proof**: The eligibility of each validator depends on several fields: `activation_epoch`, `exit_epoch`, `slashed`, `withdrawable_epoch`. There are no inter-validator data dependencies (aggregation) so each validator's eligibility is independent of any changes to the rest of the validator set. The `slashed` field is not written as part of epoch processing and the other 3 fields
+are only written as part of `process_registry_updates`. Supporting `call_db` queries:
+
+```
+> SELECT field FROM indirect_reads WHERE function = "get_eligible_validator_indices";
+validators.activation_epoch
+validators.exit_epoch
+validators.slashed
+validators.withdrawable_epoch
+```
+
+```
+> SELECT DISTINCT function FROM indirect_writes WHERE field = "validators.activation_epoch" OR field = "validators.exit_epoch" OR field = "validators.slashed" OR field = "validators.withdrawable_epoch";
+process_registry_updates
+initiate_validator_exit
+```
+
+**Lemma `unslashed_participating_indices_fixed`**: Assume $N > 0$. For all intermediate states prior
+to `process_participation_flag_updates` during epoch processing at the end of epoch $N$, each
+validator's presence in the set of unslashed participating indices for the previous epoch is equal
+to `is_unslashed_participating_index(validator_info, flag_index)`, i.e. `forall flag_index. i in
+unslashed_participating_indices(state, flag_index, N - 1) ==
+is_unslashed_participating_index(validator_info[i], flag_index)`.
+
+**Proof**: Consider each index individually. Whether an index `i` appears in
+`get_eligible_validator_indices(state)` does not depend on any aggregate data, and _only_ depends on
+fields of `state.validators[i]` and `state.previous_epoch_participation[i]`. Therefore during
+each iteration of single-pass epoch processing we just need to show that these fields are constant.
+The validator's activity is determined by its `activation_epoch` and `exit_epoch` which are constant
+per the lemma `prev_active_indices_fixed`. Therefore `i in active_validator_indices` is equal to
+`validator_info[i].is_active_previous_epoch`, which was cached at the start of the iteration. The
+other relevant field of the `Validator` object is `slashed`, which is immutable throughout all of
+epoch processing and is therefore safe to cache in `ValdidatorInfo.is_slashed`. Finally, consider
+the participation flags for the validator in the previous epoch. During epoch processing, the
+previous epoch participation flags are only written by `process_participation_flag_updates`, so
+the value cached in `ValidatorInfo.previous_epoch_participation` is equal to the value used by
+`get_eligible_validator_indices(state)` for all intermediate states prior to the execution of
+`process_participation_flag_updates` (which occurs _after_ single-pass epoch processing).
+Supporting `call_db` analysis:
+
+```
+> SELECT * FROM indirect_writes WHERE field = "validators.slashed";
+# empty
+```
+
+```
+> SELECT DISTINCT function FROM indirect_writes WHERE field = "previous_epoch_participation";
+process_participation_flag_updates
+```
 
 ### Activation Queue Proof
 
@@ -1143,11 +1195,32 @@ the queue computed by `get_validators_eligible_for_activation`.
 
 ### Justificaton and Finalization Proof
 
-**Lemma:** Computing justification and finalization using the progressive balances cache
-is equivalent to `process_justification_and_finalization`.
+**Lemma:** Computing justification and finalization using the progressive balances cache via
+`process_justification_and_finalization_fast` is equivalent to `process_justification_and_finalization`.
 
-**Proof**: The progressive balances cache `p` satisfies `valid_progressive_balances(pre_state, p)` where `pre_state` is the state at the very start of epoch processing before any changes are made. During the execution of `process_justification_and_finalization`, the aggregate values `total_active_balance`, `previous_target_balance` and `current_target_balance` are equal to `p.total_active_balance`, `p.previous_epoch_flag_attesting_balances[TIMELY_TARGET_FLAG_INDEX]` and `p.current_epoch_flag_attesting_balances[TIMELY_TARGET_FLAG_INDEX]` respectively. This follows from the equality established by `valid_progressive_balances` and the fact that no modifications are made to `pre_state` before these values are calculated by `process_justification_and_finalization`. Therefore, both functions pass the same values to `weigh_justification_and_finalization`
-, and compute the same result.
+**Proof**: The progressive balances cache `p` satisfies `valid_progressive_balances(pre_state)` where `pre_state` is the state at the very start of epoch processing before any changes are made. During the execution of `process_justification_and_finalization`, the aggregate values `total_active_balance`, `previous_target_balance` and `current_target_balance` are equal to `p.total_active_balance`, `p.previous_epoch_flag_attesting_balances[TIMELY_TARGET_FLAG_INDEX]` and `p.current_epoch_flag_attesting_balances[TIMELY_TARGET_FLAG_INDEX]` respectively. This follows from the equality established by `valid_progressive_balances` and the fact that no modifications are made to `pre_state` before these values are calculated by `process_justification_and_finalization`. Therefore, both functions pass the same values to `weigh_justification_and_finalization`, and compute the same result.
+
+### Inactivity Updates Proof
+
+**Lemma**: The changes to each validator's inactivity score made by `process_single_inactivity_update` as part of `process_epoch_single_pass` are equivalent to the
+changes made by `process_inactivity_updates`.
+
+**Proof**: The calculation of inactivity scores can be broken down on an individual validator basis
+because the only aggregate it depends on is `is_in_inactivity_leak(state)`. Per the lemmma
+`is_in_inactivity_leak_fixed` the inactivity-status of the state is uniquely determined after the
+processing of justification and finalization. Therefore both the spec (`process_inactivity_updates`)
+and the single-pass algorithm (`process_single_inactivity_update`) use the same value for
+`is_in_inactivity_leak`, which is cached in the `StateContext` at the start of single-pass epoch
+processing. Validator eligibility as determined by `ValidatorInfo.is_eligible` is consistent
+by the lemma `is_eligible_fixed`, therefore the indices processed by both algorithms are the same.
+For each index, we look at whether the validator attested correctly to the target in the previous
+epoch, and compute the same outcome due to `unslashed_participating_indices_fixed` (noting $N > 0$
+because of the `current_epoch != GENESIS_EPOCH` check). The changes applied to the inactivity score
+are derived from constants (`INACTIVITY_SCORE_BIAS`) and the validator's current score which we know
+is consistent prior to the change, and also does not involve any inter-validator reads (inactivity
+score `j != i` is irrelevant to the value of inactivity score `i`). Therefore the inactivity score
+changes applied by single-pass epoch processing are equivalent to those made by
+`process_inactivity_updates`.
 
 ### Rewards and Penalties Proof
 
@@ -1162,19 +1235,15 @@ for each individual index, and that the fusion into a single loop does not affec
 
 For `get_flag_index_deltas` the main inputs are the list of `unslashed_participating_indices`, and
 the `unslashed_participating_balance` derived from the participating indices and their respective
-effective balances (`state.validators[i].effective_balance`). The participating indices are computed
-by `get_unslashed_participating_indices` which uses `get_active_validator_indices` for the previous
-epoch. By the lemma `prev_active_indices_fixed` we know that the set of active indices is equal to
-the set of active indices that would have been computed from the `pre_state` at the start of epoch
-processing (before any mutations were made). Further, the `previous_epoch_particiption` field used
-to determine participation is only mutated as part of `process_participation_flag_updates`, which
-happens *after* single-pass epoch processing and *after* `process_rewards_and_penalties`. Similarly,
-the slashed status of each validator is immutable throughout all of epoch processing and does not
-affect the result of `get_unslashed_participating_indices`. Therefore the participating indices used
-by `get_flag_index_deltas` are equal to the indices used by `valid_progressive_balances` at the
-start of epoch processing. Likewise the validator `effective_balance` field is immutable until
-`process_effective_balance_updates` runs, and so the `unslashed_participating_balance` is equal to
-the corresponding total balance from the
+effective balances (`state.validators[i].effective_balance`). By the lemma
+`unslashed_participating_indices_fixed` we know that the status determined by
+`is_unslashed_participating_indices` in single-pass processing is consistent (noting that $N > 0$
+due to the `current_epoch != GENESIS_EPOCH` check). This also implies the total unslashed attesting
+balances in the progressive balances cache are correct, as they are correct at the _start_ of
+single-pass processing (due to `valid_progressive_balances(state)`) and the unslashed participating
+indices on which they depend are constant. Likewise the validator `effective_balance` field is
+immutable until `process_effective_balance_updates` runs, and so the
+`unslashed_participating_balance` is equal to the corresponding total balance from the
 `progressive_balances.previous_epoch_flag_attesting_balances[flag_index]`.
 
 Having established that the list of eligible indices and the total unslashed participating balance
@@ -1188,34 +1257,35 @@ processing is equal to the value used by `get_flag_index_deltas` by the lemma
 `is_in_inactivity_leak_fixed` (both single-pass processing and `get_flag_index_deltas` execute after
 `process_justification_and_finalization`).
 
-TODO:
-
-- similar argument for inactivity_penalties
+TODO: part of rewards and penalties (similar argument for inactivity penalty deltas)
 
 Additionally, note that there is no data dependence between the values for different validator
 indices, so it is equivalent to compute and apply all the deltas for validator index $i$
 before computing any deltas for flag index $j$.
 
-#### Supporting `call_db` analysis
+## Registry Updates Proof
 
-```
-> SELECT * FROM indirect_writes WHERE field = "previous_epoch_participation";
-process_participation_flag_updates|previous_epoch_participation
-```
+TODO: registry updates
+
+## Slashings Proof
+
+TODO: slashings
+
+## Effective Balance Updates Proof
+
+TODO: effective balance updates
+
+#### Supporting `call_db` analysis
 
 ```
 > SELECT * FROM indirect_writes WHERE field = "validators.effective_balance";
 process_effective_balance_updates|validators.effective_balance
 ```
 
-```
-> SELECT * FROM indirect_writes WHERE field = "validators.slashed";
-# empty
-```
-
-### It is safe to reorder `process_slashings`
 
 ### It is safe to reorder `process_eth1_data_reset`
+
+TODO: process_eth1_data_reset
 
 [consensus-specs]: https://github.com/ethereum/consensus-specs
 [fc_pull_tips_disc]: https://notes.ethereum.org/@djrtwo/2023-fork-choice-reorg-disclosure
