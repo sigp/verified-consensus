@@ -1123,25 +1123,26 @@ initiate_validator_exit
 **Lemma `unslashed_participating_indices_fixed`**: Assume $N > 0$. For all intermediate states prior
 to `process_participation_flag_updates` during epoch processing at the end of epoch $N$, each
 validator's presence in the set of unslashed participating indices for the previous epoch is equal
-to `is_unslashed_participating_index(validator_info, flag_index)`, i.e. `forall flag_index. i in
+to `is_unslashed_participating_index(validator_info[i], flag_index)`, i.e. `forall flag_index. i in
 unslashed_participating_indices(state, flag_index, N - 1) ==
 is_unslashed_participating_index(validator_info[i], flag_index)`.
 
 **Proof**: Consider each index individually. Whether an index `i` appears in
-`get_eligible_validator_indices(state)` does not depend on any aggregate data, and _only_ depends on
-fields of `state.validators[i]` and `state.previous_epoch_participation[i]`. Therefore during
-each iteration of single-pass epoch processing we just need to show that these fields are constant.
-The validator's activity is determined by its `activation_epoch` and `exit_epoch` which are constant
-per the lemma `prev_active_indices_fixed`. Therefore `i in active_validator_indices` is equal to
+`get_unslashed_participating_indices(state, flag_index, N - 1)` does not depend on any aggregate
+data, and _only_ depends on fields of `state.validators[i]` and
+`state.previous_epoch_participation[i]`. Therefore during each iteration of single-pass epoch
+processing we just need to show that these fields are constant.  The validator's activity is
+determined by its `activation_epoch` and `exit_epoch` which are constant per the lemma
+`prev_active_indices_fixed`. Therefore `i in active_validator_indices` is equal to
 `validator_info[i].is_active_previous_epoch`, which was cached at the start of the iteration. The
 other relevant field of the `Validator` object is `slashed`, which is immutable throughout all of
 epoch processing and is therefore safe to cache in `ValdidatorInfo.is_slashed`. Finally, consider
 the participation flags for the validator in the previous epoch. During epoch processing, the
-previous epoch participation flags are only written by `process_participation_flag_updates`, so
-the value cached in `ValidatorInfo.previous_epoch_participation` is equal to the value used by
-`get_eligible_validator_indices(state)` for all intermediate states prior to the execution of
-`process_participation_flag_updates` (which occurs _after_ single-pass epoch processing).
-Supporting `call_db` analysis:
+previous epoch participation flags are only written by `process_participation_flag_updates`, so the
+value cached in `ValidatorInfo.previous_epoch_participation` is equal to the value used by
+`get_unslashed_participating_indices(state, flag_index, N - 1)` for all intermediate states prior to
+the execution of `process_participation_flag_updates` (which occurs _after_ single-pass epoch
+processing). Supporting `call_db` analysis:
 
 ```
 > SELECT * FROM indirect_writes WHERE field = "validators.slashed";
