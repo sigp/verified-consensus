@@ -1270,7 +1270,62 @@ TODO: registry updates
 
 ## Slashings Proof
 
-TODO: slashings
+**Lemma**: The balance changes applied by `process_single_slashing` are the same as the balance
+changes applied by `process_slashings`.
+
+**Proof**: Two aggregates are used by `process_slashings`: the `total_balance` and
+`sum(state.slashings)`, which are together used to compute `adjusted_total_slashing_balance`. By the
+lemma `total_active_balance_fixed` we know that the `total_balance` used by the spec is equal to the
+total balance of the pre-state at the start of epoch processing. Noting that in the spec
+`process_slashings` occurs prior to the updates to effective balances in
+`process_effective_balance_updates`. Therefore the total active balance from the progressive balance
+cache is correct, as it matches the total active balance of the pre-state due to
+`valid_progressive_balances`.
+
+For the `sum(state.slashings)` aggregate, observe that the `state.slashings` field is only modified
+by `process_slashings_reset`, which occurs after `process_epoch_single_pass` (and
+`process_slashings` in the spec). Therefore it is safe to cache the value of
+`adjusted_total_slashing_balance` which is computed from these two aggregates, at the start of
+`process_epoch_single_pass` when the `SlashingsContext` is initialized.
+
+Aside from the aggregates, `process_single_slashing` also interleaves the slashing-related changes
+to validators with the other parts of single-pass epoch processing. A validator's correlated
+slashing penalty is determined by three fields of `Validator`: `slashed`
+`withdrawable_epoch` and `effective_balance`. As noted elsewhere, `slashed` is immutable during
+epoch processing, so reordering the reads of `slashed` is safe. For `withdrawable_epoch`, this is
+modified by the spec in `process_registry_updates` and by single-pass processing in
+`process_single_registry_update`. In both cases, the changes for an index `i` only occur _after_
+the calculation of the correlated slashing penalty, so at the point when single-pass epoch
+processing reads `withdrawable_epoch` for a validator, it has the same value as in the pre-state.
+And likewise for the spec. Hence the values are identical. A similar argument applies for the
+validator's `effective_balance` which is only written during `process_effective_balance_updates` and
+`process_single_effective_balance_update`, which occur after `process_slashings` (in the spec) and
+after `process_single_slashing` (in single-pass processing), respectively.
+
+Therefore the correlated slashing penalty calculated for each index is the same in both approaches.
+It only remains to be shown that the balance change that results from the penalty is identical. To
+show this, we note that the correctness proofs for the other parts of single-pass epoch processing
+establish equality between validator `i`'s balance at the start of `process_single_slashing` and the
+same validator's balance at the start of `process_slashings`. In other words, all the mutations
+which are applied to a validator's balance (by `process_rewards_and_penalties`) happen on a
+per-validator basis, and no iteration for an index `j != i` modifies the balance of validator `i`.
+Therefore when the penalty is applied, it results in the same balance for `i` in both spec and
+implementation, and maintains the invariant for the next step of single-pass processing.
+
+Supporting `call_db` analysis:
+
+```
+> SELECT function FROM indirect_writes WHERE field = "slashings";
+process_slashings_reset
+```
+
+```
+> SELECT function FROM indirect_writes WHERE field = "balances";
+process_slashings
+process_rewards_and_penalties
+increase_balance
+decrease_balance
+```
 
 ## Effective Balance Updates Proof
 
