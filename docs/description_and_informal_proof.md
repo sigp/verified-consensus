@@ -1338,10 +1338,32 @@ TODO: effective balance updates
 process_effective_balance_updates|validators.effective_balance
 ```
 
+### Eth1 Data Reset Proof
 
-### It is safe to reorder `process_eth1_data_reset`
+**Lemma**: Executing `process_eth1_data_reset` after `process_effective_balances` is equivalent to
+executing it prior. As a result, the state computed by single-pass epoch processing after
+`process_eth1_data_reset` is equal to the state computed by `process_epoch` after
+`process_effective_balance_updates`.
 
-TODO: process_eth1_data_reset
+**Proof**: Aside from reading the current slot, the functions `process_eth1_data_reset` and
+`process_effective_balances` read and write disjoint sets of fields. A single field is written by
+`process_eth1_data_reset`, namely the `eth1_data_votes`. This field is not read or written by
+`process_effective_balances` nor indeed any other function. Therefore the mutations made by
+`process_eth1_data_reset` and `process_effective_balances` commute, and the reordering is valid.
+
+Supporting `call_db` analysis:
+
+```sql
+> SELECT field FROM indirect_writes WHERE function = "process_eth1_data_reset";
+eth1_data_votes
+```
+
+```sql
+> SELECT function FROM indirect_reads WHERE field = "eth1_data_votes";
+# empty
+> SELECT function FROM indirect_writes WHERE field = "eth1_data_votes";
+process_eth1_data_reset
+```
 
 [consensus-specs]: https://github.com/ethereum/consensus-specs
 [fc_pull_tips_disc]: https://notes.ethereum.org/@djrtwo/2023-fork-choice-reorg-disclosure
