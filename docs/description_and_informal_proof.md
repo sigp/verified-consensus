@@ -1037,7 +1037,7 @@ def process_single_effective_balance_update(
         validator_info.effective_balance,
     )
     # Add the validator's effective balance to the base reward cache.
-    next_epoch_base_reward_cache.append(validator.effective_balance)
+    next_epoch_base_reward_cache.effective_balances.append(validator.effective_balance)
 ```
 
 ## Informal Proof Sketch
@@ -1329,14 +1329,34 @@ decrease_balance
 
 ## Effective Balance Updates Proof
 
-TODO: effective balance updates
+**Lemma**: The changes to each validator's effective balance made by
+`process_single_effective_balance_update` as part of `process_epoch_single_pass` are equivalent to
+the changes made by `process_effective_balance_updates`.
 
-#### Supporting `call_db` analysis
+**Proof**: We assume that prior to the execution of `process_single_effective_balance_update` for
+validator `i` that the balance invariant has been maintained, i.e. that the balance of validator `i`
+in single-pass processing is equal to the balance of validator `i` in the spec's state prior to
+the execution of `process_effective_balance_updates`. This invariant is established by the proofs
+for the previous steps of single-pass epoch processing.
 
+From this invariant we can deduce that the reads made by `process_single_effective_balance_update`
+are consistent with the reads made by the spec. For validator `i` the only fields read are the
+balance for `i` and the `effective_balance`. There is no aggregation, nor any inter-validator data
+dependencies. The balance for `i` is equal by the balance invariant, and the `effective_balance`
+is equal by virtue of being immutable in prior parts of epoch processing.
+
+The other values that are cached in the `EffectiveBalancesContext` are derived from constant
+configuration parameters, and are therefore immutable.
+
+Supporting `call_db` analysis:
+
+```sql
+> SELECT function FROM indirect_writes WHERE field = "validators.effective_balance";
+process_effective_balance_updates
 ```
-> SELECT * FROM indirect_writes WHERE field = "validators.effective_balance";
-process_effective_balance_updates|validators.effective_balance
-```
+
+_For consideration of the progressive balance cache changes made in
+`process_single_effective_balance_update` see the **Progressive Balances Proof** below_.
 
 ### Eth1 Data Reset Proof
 
@@ -1364,6 +1384,60 @@ eth1_data_votes
 > SELECT function FROM indirect_writes WHERE field = "eth1_data_votes";
 process_eth1_data_reset
 ```
+
+## Progressive Balances Proof
+
+**Lemma**: After the execution of `process_epoch_fast` and the increment of the `state.slot`
+(implied by `process_slots`) the progressive balances cache validity is maintained, i.e.
+`valid_progressive_balances(state)`.
+
+**Proof**: The cache for the next epoch $(N + 1)$ which becomes `state.progressive_balances` is
+initialized by `new_next_epoch_progressive_balances` during `process_epoch_single_pass` for epoch
+$N$. This cache starts off with the total active balance and current epoch flag balances set to 0,
+and the current epoch $(N)$ totals rotated into the field for previous epoch totals. No
+attestations have been processed for epoch $N + 1$ at this stage, so the 0 totals for the current
+epoch flag balances are immediately correct.
+
+The correct previous epoch ($N$) flag totals depend on the output of `get_total_balance` and
+`get_unslashed_participating_indices` which in turn depend on `previous_epoch_participation_flags`,
+and the validator fields `slashed`, `activation_epoch`, `exit_epoch` and `effective_balance`. The
+`previous_epoch_participation_flags` are immutable apart from a rotation during
+`process_participation_flag_updates` which mirrors the rotation applied to the cache. Therefore the
+participation flags which were used in the calculation of the
+`previous_epoch_flag_attesting_balances` are the ones which _should_ have been used for calculating
+the totals, and no additional adjustments are required on account of the participation flags.
+
+Similarly, the `slashed` field is immutable during epoch processing, and no adjustments are required
+on account of it. The activity-related fields `activation_epoch` and `exit_epoch` are more subtle,
+but ultimately inconsequential. Although they are mutated by `process_registry_updates` during epoch
+processing, they do not affect the validator's activity at epoch $N$, i.e. the value of
+`is_active_validator(validator, N)`. The `activation_epoch` is only set for new validators, to
+epochs in the future (validators are never activated at past epochs). The `exit_epoch` is likewise
+only set to future epochs for validators exiting due to the inactivity leak (validators are not
+exited at past epochs).
+
+In contrast, the `effective_balance`s which were used to calculate the previous epoch totals _do_
+have the ability to change during epoch processing, meaning that the initial totals set by
+`new_next_epoch_progressive_balances` are incorrect. The function
+`update_next_epoch_progressive_balances` corrects this for each relevant validator by applying a
+balance diff. If the validator is unslashed and has a participation flag set in the current (soon to
+be previous) epoch $(N)$ then a balance diff corresponding to the change in their effective balance
+is applied. Slashed validators are excluded, because their effective balances never contributed to
+the original totals. The `current_epoch_participation` is used because the participation bits have
+not yet been rotated when `update_next_epoch_progressive_balances` runs as part of single-pass
+processing.
+
+Finally, the `total_active_balance` is also updated as part of
+`update_next_epoch_progressive_balances` for all validators that will be active in the next (soon to
+be current) epoch $N + 1$. The value of `is_active_validator(validator, N + 1)` does not change
+between when this calculation is made and when epoch-processing completes, and this can be proved in
+two ways. 1) The minimum value that an `activation_epoch` or `exit_epoch` can be updated to is
+`compute_activation_exit_epoch(N) = N + 5` (with `MAX_SEED_LOOKAHEAD = 4`). 2) Alternatively,
+even if `MAX_SEED_LOOKAHEAD` were configured to 0, the registry changes for validators are applied
+prior to the effective balance update, in `process_single_registry_update`. This means that the
+values of `activiation_epoch` and `exit_epoch` read for validator `i` at this point are the final
+values which persist in the final state (and would be read by ` valid_progressive_balances(state)`
+after slot processing). Our formal proof will use whichever property is easier to establish.
 
 [consensus-specs]: https://github.com/ethereum/consensus-specs
 [fc_pull_tips_disc]: https://notes.ethereum.org/@djrtwo/2023-fork-choice-reorg-disclosure
