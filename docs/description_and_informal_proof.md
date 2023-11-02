@@ -1106,7 +1106,7 @@ to the cached eligibility from the `ValidatorInfo`, i.e. `i in get_eligible_vali
 **Proof**: The eligibility of each validator depends on several fields: `activation_epoch`, `exit_epoch`, `slashed`, `withdrawable_epoch`. There are no inter-validator data dependencies (aggregation) so each validator's eligibility is independent of any changes to the rest of the validator set. The `slashed` field is not written as part of epoch processing and the other 3 fields
 are only written as part of `process_registry_updates`. Supporting `call_db` queries:
 
-```
+```sql
 > SELECT field FROM indirect_reads WHERE function = "get_eligible_validator_indices";
 validators.activation_epoch
 validators.exit_epoch
@@ -1114,7 +1114,7 @@ validators.slashed
 validators.withdrawable_epoch
 ```
 
-```
+```sql
 > SELECT DISTINCT function FROM indirect_writes WHERE field = "validators.activation_epoch" OR field = "validators.exit_epoch" OR field = "validators.slashed" OR field = "validators.withdrawable_epoch";
 process_registry_updates
 initiate_validator_exit
@@ -1144,12 +1144,12 @@ value cached in `ValidatorInfo.previous_epoch_participation` is equal to the val
 the execution of `process_participation_flag_updates` (which occurs _after_ single-pass epoch
 processing). Supporting `call_db` analysis:
 
-```
+```sql
 > SELECT * FROM indirect_writes WHERE field = "validators.slashed";
 # empty
 ```
 
-```
+```sql
 > SELECT DISTINCT function FROM indirect_writes WHERE field = "previous_epoch_participation";
 process_participation_flag_updates
 ```
@@ -1264,11 +1264,11 @@ Additionally, note that there is no data dependence between the values for diffe
 indices, so it is equivalent to compute and apply all the deltas for validator index $i$
 before computing any deltas for flag index $j$.
 
-## Registry Updates Proof
+### Registry Updates Proof
 
 TODO: registry updates
 
-## Slashings Proof
+### Slashings Proof
 
 **Lemma**: The balance changes applied by `process_single_slashing` are the same as the balance
 changes applied by `process_slashings`.
@@ -1314,12 +1314,12 @@ implementation, and maintains the invariant for the next step of single-pass pro
 
 Supporting `call_db` analysis:
 
-```
+```sql
 > SELECT function FROM indirect_writes WHERE field = "slashings";
 process_slashings_reset
 ```
 
-```
+```sql
 > SELECT function FROM indirect_writes WHERE field = "balances";
 process_slashings
 process_rewards_and_penalties
@@ -1327,7 +1327,7 @@ increase_balance
 decrease_balance
 ```
 
-## Effective Balance Updates Proof
+### Effective Balance Updates Proof
 
 **Lemma**: The changes to each validator's effective balance made by
 `process_single_effective_balance_update` as part of `process_epoch_single_pass` are equivalent to
@@ -1385,7 +1385,7 @@ eth1_data_votes
 process_eth1_data_reset
 ```
 
-## Progressive Balances Proof
+### Progressive Balances Proof
 
 **Lemma**: After the execution of `process_epoch_fast` and the increment of the `state.slot`
 (implied by `process_slots`) the progressive balances cache validity is maintained, i.e.
