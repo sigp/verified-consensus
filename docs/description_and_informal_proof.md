@@ -1266,7 +1266,36 @@ before computing any deltas for flag index $j$.
 
 ### Registry Updates Proof
 
-TODO: registry updates
+**Lemma**: The changes to each validator `i` made by `process_registry_update_single` are equal to
+the changes made to that validator by `process_registry_updates`.
+
+**Proof:** Begin by considering the `activation_eligibility_epoch`. There are no inter-validator reads required to determine the value of `activation_eligibility_epoch`, as the function `is_eligible_for_activation_queue` reads only the `activation_eligibility_epoch` and `effective_balance` for validator `i`. The `activation_eligibility_epoch` is only read and written
+as part of the registry update procedures, and the `effective_balance` is only modified _after_ registry processing in `process_effective_balance_updates`. Therefore the single-pass function
+`process_registry_update_single` and the spec both compute the same value for `is_eligible_for_activation_queue`, and consequently set the `activation_eligibility_epoch` to the same value for each validator.
+
+```sql
+> SELECT function FROM indirect_reads WHERE field = "validators.activation_eligibility_epoch";
+process_registry_updates
+is_eligible_for_activation_queue
+is_eligible_for_activation
+```
+
+Now consider the `exit_epoch` and `withdrawable_epoch` fields which are set by `initiate_validator_exit` in the spec, or `initiate_validator_exit_fast` in single-pass processing.
+The decision to exiting a validator is determined by their activity status (`is_active_validator`) and their effective balance. As above, there are no inter-validator reads here, and the values for both of these fields are equal to their values in the pre-state. Therefore the implementation invokes `initiate_validator_exit_fast` if and only if the spec invokes `initiate_validator_exit`. 
+
+However, there is aggregation involved in `initiate_validator_exit` itself: the `exit_epochs` list
+is built by collating the `exit_epoch` fields of the entire validator set. In single-pass epoch processing this is replaced by a read from the `exit_cache`, which is _updated_ after each 
+exited validator. Proof of equivalence is by induction on the validator index `i`. For `i=0`
+the exit cache in `process_single_registry_update` is trivially equal to the exit cache during the
+0th iteration of `process_registry_updates`, by the fact that `valid_exit_cache` holds on the pre-state, and no mutations are made to the exit cache or validator exit epochs prior to this point.
+
+Supporting `call_db` analysis:
+
+```sql
+> SELECT function FROM indirect_writes WHERE field = "validators.exit_epoch";
+process_registry_updates
+initiate_validator_exit
+```
 
 ### Slashings Proof
 
