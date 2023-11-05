@@ -1120,6 +1120,15 @@ process_registry_updates
 initiate_validator_exit
 ```
 
+**Lemma `get_validator_churn_limit_fixed`**: The churn limit computed by
+`get_validator_churn_limit_fast(pre_state)` and cached at the start of single-pass epoch processing
+is equal to the churn limit computed by `get_validator_churn_limit(state)` for all states during
+epoch processing.
+
+**Proof**: TODO: set of active validators for current epoch does not change
+
+**Lemma `compute_activation_exit_epoch_fixed`**: TODO.
+
 **Lemma `unslashed_participating_indices_fixed`**: Assume $N > 0$. For all intermediate states prior
 to `process_participation_flag_updates` during epoch processing at the end of epoch $N$, each
 validator's presence in the set of unslashed participating indices for the previous epoch is equal
@@ -1269,9 +1278,15 @@ before computing any deltas for flag index $j$.
 **Lemma**: The changes to each validator `i` made by `process_registry_update_single` are equal to
 the changes made to that validator by `process_registry_updates`.
 
-**Proof:** Begin by considering the `activation_eligibility_epoch`. There are no inter-validator reads required to determine the value of `activation_eligibility_epoch`, as the function `is_eligible_for_activation_queue` reads only the `activation_eligibility_epoch` and `effective_balance` for validator `i`. The `activation_eligibility_epoch` is only read and written
-as part of the registry update procedures, and the `effective_balance` is only modified _after_ registry processing in `process_effective_balance_updates`. Therefore the single-pass function
-`process_registry_update_single` and the spec both compute the same value for `is_eligible_for_activation_queue`, and consequently set the `activation_eligibility_epoch` to the same value for each validator.
+**Proof:** Begin by considering the `activation_eligibility_epoch`. There are no inter-validator
+reads required to determine the value of `activation_eligibility_epoch`, as the function
+`is_eligible_for_activation_queue` reads only the `activation_eligibility_epoch` and
+`effective_balance` for validator `i`. The `activation_eligibility_epoch` is only read and written
+as part of the registry update procedures, and the `effective_balance` is only modified _after_
+registry processing in `process_effective_balance_updates`. Therefore the single-pass function
+`process_registry_update_single` and the spec both compute the same value for
+`is_eligible_for_activation_queue`, and consequently set the `activation_eligibility_epoch` to the
+same value for each validator.
 
 ```sql
 > SELECT function FROM indirect_reads WHERE field = "validators.activation_eligibility_epoch";
@@ -1280,14 +1295,50 @@ is_eligible_for_activation_queue
 is_eligible_for_activation
 ```
 
-Now consider the `exit_epoch` and `withdrawable_epoch` fields which are set by `initiate_validator_exit` in the spec, or `initiate_validator_exit_fast` in single-pass processing.
-The decision to exiting a validator is determined by their activity status (`is_active_validator`) and their effective balance. As above, there are no inter-validator reads here, and the values for both of these fields are equal to their values in the pre-state. Therefore the implementation invokes `initiate_validator_exit_fast` if and only if the spec invokes `initiate_validator_exit`. 
+Now consider the `exit_epoch` and `withdrawable_epoch` fields which are set by
+`initiate_validator_exit` in the spec, or `initiate_validator_exit_fast` in single-pass processing.
+The decision to exiting a validator is determined by their activity status (`is_active_validator`)
+and their effective balance. As above, there are no inter-validator reads here, and the values for
+both of these fields are equal to their values in the pre-state. Therefore the implementation
+invokes `initiate_validator_exit_fast` if and only if the spec invokes `initiate_validator_exit`.
 
 However, there is aggregation involved in `initiate_validator_exit` itself: the `exit_epochs` list
-is built by collating the `exit_epoch` fields of the entire validator set. In single-pass epoch processing this is replaced by a read from the `exit_cache`, which is _updated_ after each 
-exited validator. Proof of equivalence is by induction on the validator index `i`. For `i=0`
-the exit cache in `process_single_registry_update` is trivially equal to the exit cache during the
-0th iteration of `process_registry_updates`, by the fact that `valid_exit_cache` holds on the pre-state, and no mutations are made to the exit cache or validator exit epochs prior to this point.
+is built by collating the `exit_epoch` fields of the entire validator set. In single-pass epoch
+processing this is replaced by a read from the `exit_cache`, which is _updated_ after each exited
+validator. Proof of equivalence is by induction on the validator index `i`. We want to prove
+that the spec and implementation compute equal values of `exit_queue_epoch` and `exit_queue_churn`, but strengthen the inductive hypothesis to:
+
+```python
+max(
+    [v.exit_epoch for v in spec_state_i.validators if v.exit_epoch != FAR_FUTURE_EPOCH]
+    + [compute_activation_exit_epoch(get_current_epoch(spec_state_i))]
+) == (
+    max(
+        get_max_exit_epoch(exit_cache_i),
+        compute_activation_exit_epoch(state_ctxt.current_epoch),
+    )
+) and all(
+    len([v for v in spec_state_i.validators if v.exit_epoch == epoch])
+    == get_exit_queue_churn(exit_cache_i, epoch)
+    for epoch in range(0, FAR_FUTURE_EPOCH)
+)
+```
+
+The first conjuct is for equality of the _initial_ value of `exit_queue_epoch` and the second is
+a strengthened property that states that the exit cache contains the correct count of exiting
+validators for _any_ choice of `exit_queue_epoch` (as the `exit_queue_epoch` may be different in
+different iterations).
+
+For `i=0` the inductive hypothesis holds because `valid_exit_cache` holds on the pre-state. The exit
+cache contains a key for every `exit_epoch != FAR_FUTURE_EPOCH` of validators in the validator set,
+so `get_max_exit_epoch(exit_cache)` yields a value equal to `max(exit_epochs) or 0` in
+`initiate_validator_exit`, and the equality of the first conjuct follows from that (any 0 value is
+ignored by the `max` due to `compute_activation_exit_epoch(..)` being strictly non-zero). The second
+conjunct also follows directly from `valid_exit_cache`: the counts held by the exit cache for each
+epoch are exactly the counts computed by iterating over the validator set. Any epochs missing from
+the cache are also missing from the validator set and result in `len([]) == 0` which is trivial.
+It's worth noting that no mutations are made to the exit cache or validator exit epochs prior to
+this point (the 0th iteration).
 
 Supporting `call_db` analysis:
 
@@ -1296,6 +1347,68 @@ Supporting `call_db` analysis:
 process_registry_updates
 initiate_validator_exit
 ```
+
+In the inductive case `i=k + 1`, we need to prove that `record_validator_exit` at the end of
+iteration `k` maintains the inductive hypothesis for the start of iteration `k + 1`, assuming that
+it was upheld at the start of iteration `k`. We only need to consider the case where validator `k`
+is actually exited, because in the case where they are not exited, the hypothesis is trivially
+maintained (no changes to the `exit_epoch` imply no changes to the values in either conjunct).
+We split the analysis of `record_validator_exit` into two cases: 1) When the exit epoch of
+validator `k` (`exit_epoch_k`) is already present in the exit cache and 2) When the exit epoch of
+validator `k` is _not_ present in the exit cache. In case (1) `record_validator_exit` adds 1 to the
+count for `exit_epoch_k`. This does not affect the value of the max `exit_epoch` for the spec
+or the cache, so the first conjunct follows trivially from the inductive hypothesis. The second
+conjunct _is_ affected, with the validator object for `k` having had its `exit_epoch` updated to
+from `FAR_FUTURE_EPOCH` to `exit_epoch_k`. Therefore `len([v for v in spec_state_k_plus_1.validators
+if v.exit_epoch == exit_epoch_k]) == len([v for v in spec_state_k.validators if v.exit_epoch ==
+exit_epoch_k]) + 1`. This is mirrored by the increment of the exit cache entry for `exit_epoch_k`,
+which yields `get_exit_queue_churn(exit_cache_k_plus_1, exit_epoch_k) ==
+get_exit_queue_churn(exit_cache_k, exit_epoch_k) + 1`. These two terms (for spec and impl) are then
+equal by the inductive hypothesis. Other `epoch`s covered by the `all` quantifier have their values
+unchanged because iteration `k` only modifies validator `k`. Therefore the equality of the second
+conjunct of the hypothesis is upheld. In case (2) where `exit_epoch_k` is not in the exit cache
+it must be the case that either (2a) Validator `k` is the first to exit with an exit epoch equal to
+`compute_activation_exit_epoch(..)`, or (2b) There are already `churn_limit` exited validators with
+exit epoch equal to `exit_epoch_k - 1`. In case (2a) the first conjunct reduces to
+`max([exit_epoch_k] + [compute_activation_exit_epoch(get_current_epoch(spec_state_k_plus_1)]) ==
+max(exit_epoch_k, compute_activation_exit_epoch(state_ctxt.current_epoch))` which is true by
+lemma `compute_activation_exit_epoch_fixed`. In case (2b) we have by the inductive hypothesis that
+`exit_epoch_k - 1 == max(get_max_exit_epoch(exit_cache_k))` and need to show that `exit_epoch_k ==
+max(get_max_exit_epoch(exit_cache_k_plus_1))`. 
+
+TODO: keep going
+
+of any already exited validator is `exit_epoch_k - 1 >= compute_activation_exit_epoch(..)` because
+`exit_epoch_k` was incremented from the previous maximum value. Therefore `max([]`
+
+that `exit_epoch_k = max([v.exit_epoch for v in state.validators if v.exit_epoch != FAR_FUTURE_EPOCH] + [compute_activation_exit_epoch(get_current_epoch(spec_state_i))]
+) + 1`, because this is the modification made to the
+`exit_queue_
+
+
+Examining `record_validator_exit` we can see that it in the case where the `exit_epoch` already has
+exiting validators, it adds 1 to the count. In
+this case the initial value of `exit_queue_epoch` is unaffected for `i=k + 1` compared to `i=k`
+(the max exit epoch remains the same). Then, calculation of `exit_queue_churn` is the same for both
+spec and implementation because from the inductive hypothesis we have
+`get_exit_queue_churn(exit_cache_k, exit_queue_epoch) == len([v for v in state_k.validators if
+v.exit_epoch == exit_queue_epoch])` where `exit_cache_k` and `state_k` are the cache and state at
+the start of iteration `k`. In iteration `k + 1` single-pass epoch processing computes
+`get_exit_queue_churn(exit_cache_k_plus_1, exit_queue_epoch) == get_exit_queue_churn(exit_cache_k,
+exit_queue_epoch) + 1`, noting that the `exit_queue_epoch`
+
+is trivially maintained spec's `initiate_validator_exit`, the `len([v for v in
+state.validators if v.exit_epoch == exit_queue_epoch])` is re-evaluated.
+
+_initial_ value of `exit_queue_epoch` follows
+from that combined. Similarly for `exit_queue_churn` the cache contains the _count_ of validators
+exiting at each epoch, which is exactly what the spec's `initiate_validator_exit` calculates using
+`len([v for v in state.validators if v.exit_epoch == exit_queue_epoch])`.
+
+The final value of
+`exit_queue_churn` is then determined depending on `exit_queue_churn` and the churn limit. We have
+equality between the cached churn limit and the spec's churn limit by the lemma
+`get_validator_churn_limit_fixed`.
 
 ### Slashings Proof
 
