@@ -937,7 +937,7 @@ def get_inactivity_penalty_delta(
     state_ctxt: StateContext,
 ) -> (Gwei, Gwei):
     # Implementation note: could abstract over fork's inactivity penalty quotient here
-    if not is_unslashed_participating_index(TIMELY_TARGET_FLAG_INDEX):
+    if not is_unslashed_participating_index(validator_info, TIMELY_TARGET_FLAG_INDEX):
         penalty_numerator = validator_info.effective_balance * inactivity_score
         penalty_denominator = INACTIVITY_SCORE_BIAS * INACTIVITY_PENALTY_QUOTIENT_BELLATRIX
         penalty = penalty_numerator / penalty_denominator
@@ -1273,11 +1273,39 @@ processing is equal to the value used by `get_flag_index_deltas` by the lemma
 `is_in_inactivity_leak_fixed` (both single-pass processing and `get_flag_index_deltas` execute after
 `process_justification_and_finalization`).
 
-TODO: part of rewards and penalties (similar argument for inactivity penalty deltas)
+For `get_inactivity_penalty_deltas` the argument is similar. The spec uses
+`get_unslashed_participating_indices` again, which we know is consistent with the cached status
+in the `ValidatorInfo` used by `get_inactivity_penalty_delta` (by lemma
+`unslashed_participating_indices_fixed`). Likewise the validator's effective balance is still yet to
+be updated by `process_single_effective_balance_update`/`process_effective_balance_updates`, and is
+equal in spec and implementation. The final input to the inactivity penalty calculation is the
+`inactivity_score` of the validator, which is mutated by single-pass
+epoch processing for validator `i` prior to
+`get_inactivity_penalty_delta`, using `process_single_inactivity_score`. On the spec side, the
+`inactivity_score` is only mutated as part of `process_single_inactivity_scores`, which applies the
+change for all indices _prior_ to `process_rewards_and_penalties`. The previous [Inactivity Updates Proof](#inactivity-updates-proof)
+establishes that each inactivity update is correct, therefore when the `inactivity_score` for
+validator `i` is read by `get_inactivity_penalty_delta` it has the same (updated) value as it does
+when read by the spec as part of `get_inactivity_penalty_deltas`.
 
-Additionally, note that there is no data dependence between the values for different validator
-indices, so it is equivalent to compute and apply all the deltas for validator index $i$
-before computing any deltas for flag index $j$.
+Therefore the deltas computed by both approaches are equal. It only remains to be shown that the
+balance changes that result from the deltas are identical. To show this, we observe that the
+balance for each validator (`state.balances[i]`) is immutable prior to the processing of rewards and
+penalties. Therefore at the start of the application of deltas for `index=i` in
+`process_rewards_and_penalties` the balance of validator `i` is equal to the balance of that
+validator in the pre-state. Similarly in single-pass epoch processing, no changes to the validator
+`balance` are made prior to `process_single_reward_and_penalty`, and therefore it is equal to the
+validator's balance in the pre-state.
+
+Supporting `call_db` analysis:
+
+```sql
+SELECT function FROM indirect_writes WHERE field = "balances";
+process_slashings
+process_rewards_and_penalties
+increase_balance
+decrease_balance
+```
 
 ### Registry Updates Proof
 
