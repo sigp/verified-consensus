@@ -1067,12 +1067,16 @@ epoch's previous justified epoch (at most $N - 2$ due to this value being set fr
 **Lemma `active_indices_fixed`:** The value of `get_active_validator_indices(state, N)` is the
 same for all intermediate values of `state` during epoch processing at the end of epoch `N`.
 
-**Proof:** TODO: aux lemma
+**Proof:**: The active indices depend on the validator fields `activation_epoch` and `exit_epoch`
+which are only mutated as part of `process_registry_updates`. The changes applied (exits and
+activations) only ever set the `activation_epoch` and `exit_epoch` to epochs in the future, meaning
+that the activation status of each validator at epoch $N$ remains the same despite these changes.
 
 **Lemma `prev_active_indices_fixed`:** The value of `get_active_validator_indices(state, N - 1)` is
 the same for all intermediate values of `state` during epoch processing at the end of epoch `N`.
 
-**Proof:** TODO: aux lemma
+**Proof:** As above for `active_indices_fixed`, the `activation_epoch` and `exit_epoch` are never
+mutated in a way that changes activity at epoch $N - 1$.
 
 **Lemma `total_active_balance_fixed`:** During epoch processing at the end of epoch $N$,
 the value of `get_total_active_balance(state, N)` is fixed for all intermediate states prior to
@@ -1125,9 +1129,11 @@ initiate_validator_exit
 is equal to the churn limit computed by `get_validator_churn_limit(state)` for all states during
 epoch processing.
 
-**Proof**: TODO: set of active validators for current epoch does not change
-
-**Lemma `compute_activation_exit_epoch_fixed`**: TODO.
+**Proof**: The churn limit is derived from the (cached) number of active validators. Per
+`active_indices_fixed` we know that the set of active validators for the current epoch remains the
+same throughout epoch processing. This implies that the cached value equals the spec's value at any
+point during epoch processing, and therefore the churn limit derived arithmetically from remains the
+same for the duration of epoch processing.
 
 **Lemma `unslashed_participating_indices_fixed`**: Assume $N > 0$. For all intermediate states prior
 to `process_participation_flag_updates` during epoch processing at the end of epoch $N$, each
@@ -1382,8 +1388,7 @@ From the lemma proved by induction, it is straight-forward to derive equality fo
 `exit_queue_epoch` and `exit_queue_churn` variables in
 `initiate_validator_exit`/`initiate_validator_exit_fast` whenever they are invoked. We note that the
 values of `get_validator_churn_limit` and `compute_activation_exit_epoch` are invariant for the
-duration of epoch processing (see lemmas `get_validator_churn_limit_fixed` and
-`compute_activation_exit_epoch_fixed`).
+duration of epoch processing (see lemma `get_validator_churn_limit_fixed`).
 
 For the validator activations, we have equality on the activation queues used by single-pass epoch
 processing and the spec by the [_Activation Queue Proof_](#activation-queue-proof). In addition to
