@@ -1,5 +1,6 @@
 theory Traces
-imports Main CRA_Obs CRA_Atomic
+imports Main CRA_Obs CRA_Atomic  "~~/src/HOL/Library/Monad_Syntax" "rg-algebra/AbstractAtomicTest/Constrained_Atomic_Commands"
+
 begin
 
 find_consts "'a + 'b \<Rightarrow> bool"
@@ -899,7 +900,6 @@ lemma split_match: "lengthS x = Some (Suc n) \<Longrightarrow> match x y \<longl
    apply (clarsimp simp: match_def last_def first_def isl_iff split: sum.splits)
    apply (metis isl_iff lessI sum.disc(2))
   apply (clarsimp simp: match_def)
-   apply (subst last_index_iff, assumption )
 
   apply (case_tac "lengthS y' = None")
    apply (subst first_index_iff')
@@ -931,8 +931,6 @@ lemma split_match_fixtype: "lengthS x = Some (Suc n) \<Longrightarrow>
    apply (clarsimp simp: match_def last_def first_def isl_iff split: sum.splits)
    apply (metis isl_iff lessI sum.disc(2))
   apply (clarsimp simp: match_def)
-   apply (subst last_index_iff, assumption )
-
   apply (case_tac "lengthS y' = None")
    apply (subst first_index_iff')
     apply (metis lengthS_appendD option.distinct(1) option.exhaust)
@@ -1694,14 +1692,7 @@ lemma first_trace_seq:" first_trace (seq_trace a b) = first_trace a"
    apply (metis bot_eq_iff non_failed_trace_eq)
   oops *)
   by (metis init_trace trace_None_simp)
-  by (metis init_trace trace_def)
-  oops
-    apply (metis failed_trace_def incomplete_trace_def incomplete_trace_empty lengthS_empty lengthS_some_finite non_failed_finite_not_failed_last sup1I1 tr.simps(2))
-  using bot_eq_iff apply blast
-  apply (intro conjI impI; clarsimp simp: non_failed_trace_eq_iff appendS_eq_empty_iff)
-  using bot_eq_iff apply blast
-   apply (metis bot_eq_iff )
-  by (simp add: bot_eq_iff failed_trace_def incomplete_trace_def)
+ 
 
 
   
@@ -1725,10 +1716,8 @@ lemma first_not_bot_simp[simp]: "(Trace a t) \<noteq> bottom (Trace a t) ==> fir
 
 lemma empty_first_trace_iff: "Empty = first_trace b \<longleftrightarrow> b = Empty"
   apply (clarsimp simp: first_trace_def)
-  apply (safe)
    apply (clarsimp simp: trace_def split: if_splits)
    apply (metis init.simps(1) last_trace.cases option.simps(3))
-  apply (clarsimp)
   done
 
 lemma length_cons_someI[intro]:"lengthS (xs) = Some n \<Longrightarrow> lengthS (cons_t x xs) = Some (Suc n)"
@@ -1761,7 +1750,6 @@ lemma cons_t_appendS_shift: "cons_t x (appendS xs ys) = appendS (cons_t x xs) ys
 
 lemma term_is_lastI: "terminates (tr b) \<Longrightarrow> lengthS (tr b) = Some (Suc n) \<Longrightarrow> index (tr b) n = Inl s \<Longrightarrow> (Trace (state_of s) (empty_trace Term)) = last_trace b"  
   apply (case_tac b; clarsimp simp: Let_unfold split: option.splits if_splits)
-  apply (intro conjI; clarsimp)
    apply (simp add: last_index_iff lengthS_cons)
   apply (simp add: index_cons_t last_index_iff lengthS_cons)
   by (simp add: index_cons_t lengthS_cons terminates_def)
@@ -1773,7 +1761,7 @@ lemma last_appendS: "finiteS (tr a) \<Longrightarrow> last_trace a = first_trace
   apply (cases a; clarsimp simp: Let_unfold empty_first_trace_iff split: option.splits if_splits)
    apply ( intro conjI impI; (clarsimp split: sum.splits option.splits)?)
   sorry
-  oops
+ (*  oops
      apply (intro conjI impI)
        apply (smt (verit) cons_t_def last_index_iff lengthS_cons lengthS_def 
                           option.map(2) option.simps(3) terminates_def)
@@ -1785,7 +1773,7 @@ lemma last_appendS: "finiteS (tr a) \<Longrightarrow> last_trace a = first_trace
    last_index_iff le_eq_less_or_eq option.exhaust_sel option.simps(3) plus_1_eq_Suc sum.case_eq_if sum.disc(1) terminates_def)
     apply (intro conjI impI allI; clarsimp simp: cons_t_appendS_shift)
     apply (case_tac "\<exists>m. lengthS (tr b) = Some m", clarsimp)
-  sorry
+  sorry *)
 
 
 lemma first_glue_traces: " first_trace b = first_trace (trace (init b) (appendS (tr b) (tr c)))"
@@ -2114,9 +2102,6 @@ lemma ref_inl_inrD[simp, dest]: "x \<le> y \<Longrightarrow> index (tr x) n = In
 
 lemma ref_inr_inlD[simp, dest]: "x \<le> y \<Longrightarrow> index (tr x) n = Inr a \<Longrightarrow> index (tr y) n = Inl b \<Longrightarrow> a = Incomplete"
   by (metis (full_types) less_eq_ref_stepD old.sum.distinct(2) ref_step.simps(12) ref_step.simps(6) symbols.exhaust)
-  oops
-  by (metis Inl_Inr_False isl_c_ref_iff less_eq_Trace_def sum.disc(1) sum.inject(2))
-
 
 
 lemma ref_inr_inl_iff[simp]: "ref_step (Inr ba) (Inl aa) \<longleftrightarrow> ba = Incomplete"
@@ -2133,8 +2118,9 @@ lemma sync_incomplete': "sync_step f  (Inr x) (Inr Incomplete) = (if x = Abort t
 
 lemma sync_step_conj_mono: "x \<le> y \<Longrightarrow> a \<le> b \<Longrightarrow> ref_step (sync_step conj_sync (index (tr x) n) (index (tr a) n)) (sync_step conj_sync (index (tr y) n) (index (tr b) n))" 
   apply (drule less_eq_ref_stepD[where n=n])
+  
   apply (drule less_eq_ref_stepD[where n=n]) back
-   apply (case_tac "index (tr x) n"; case_tac "index (tr a) n"; case_tac "index (tr y) n"; case_tac "index (tr b) n"; clarsimp)
+  apply (case_tac "index (tr x) n"; case_tac "index (tr a) n"; case_tac "index (tr y) n"; case_tac "index (tr b) n"; clarsimp)
        apply (case_tac ba; clarsimp)
     apply (case_tac ba; clarsimp)
     apply (case_tac ba; clarsimp)
@@ -2169,7 +2155,6 @@ lemma conj_t_mono: "x \<le> y \<Longrightarrow> a \<le> b \<Longrightarrow> conj
 
 lemma tr_some_bot[simp]: "tr (SOME x. \<exists>y. x = bottom y) = empty_trace Incomplete"
 oops
-  by (metis (mono_tags, lifting) Trace.sel(2) bottom_Trace_def)
 
 
 lemma sync_assoc: "sync_step conj_sync a (sync_step conj_sync b c) = sync_step conj_sync  (sync_step conj_sync a b) c"
@@ -3041,7 +3026,7 @@ lemma seq_conj_exchange: "seq_trace (conj_t x y) (conj_t x' y') \<le> conj_t (se
 
 lemma seq_par_exchange: "seq_trace (par_t x y) (par_t x' y') \<le> par_t (seq_trace x x') (seq_trace y y')"
   sorry
-  apply (clarsimp simp: conj_t_def, safe; clarsimp?)
+ (* apply (clarsimp simp: conj_t_def, safe; clarsimp?)
    apply (case_tac "failed_trace x")
     apply (subst failed_trace_seq, erule failed_trace_sync_conj)
     apply (subst failed_trace_seq, assumption)
@@ -3063,7 +3048,7 @@ lemma seq_par_exchange: "seq_trace (par_t x y) (par_t x' y') \<le> par_t (seq_tr
       apply (clarsimp simp: sync_inl_iff)
       apply (rule appendS_induct)
        apply (clarsimp simp: index_append split: if_splits)
-  sorry
+  sorry *)
 
 
 interpretation seq_par_elem seq_trace last_trace "(\<lambda>s. Trace s (empty_trace Term))" first_trace conj_t regular
@@ -3386,7 +3371,6 @@ lengthS_zero_empty_trace not_aborted_no_aborts option.sel sup1I2 sync_step_par_i
   using map_sum_InrD apply fastforce
   done
 
-find_consts "'a \<Rightarrow> ('a, 'b) trace"
 
 definition atomic_trace where
   "atomic_trace l s = (if l = labels.Pgm then Trace (fst s) (singleton (Pgm (snd (s))) Term) else Trace (fst s) (singleton (Env (snd (s))) Term)) "
@@ -3786,7 +3770,6 @@ lemma seq_inf_interchange: "ab \<le> atomic_trace l (a, b) \<Longrightarrow> bb 
        apply (metis appendS_iff_cons init.simps(1) ref_step_index_append_incomplete tr.simps(1) trace_refI)
       apply (rule_tac x="Trace a (singleton (label_map l b) Term)" in exI)
       apply (intro conjI)
-  apply (clarsimp simp: meet_init_eq)
          apply (clarsimp simp: atomic_trace_simp)
   apply (subgoal_tac "a = aa")
 
@@ -3804,7 +3787,6 @@ lemma seq_inf_interchange: "ab \<le> atomic_trace l (a, b) \<Longrightarrow> bb 
 
        apply (clarsimp simp: index_cons_t)
   apply (elim disjE; clarsimp simp: isl_iff)
-         apply (elim disjE; clarsimp simp: atomic_trace_simp)
  apply (erule order_trans) back
         apply (clarsimp simp: seq_trace_def appendS_iff_cons)
        apply (metis isl_iff sum.disc(2))
@@ -4585,6 +4567,88 @@ apply (erule_tac x=labels.Pgm in allE)
   apply (case_tac x; clarsimp)
   sorry
 
+end
+
+term "Inl"
+
+definition "bindCont (f :: ('a \<Rightarrow> 'r) \<Rightarrow> 'r) (g :: 'a \<Rightarrow> ('b \<Rightarrow> 'r) \<Rightarrow> 'r) \<equiv> \<lambda>(c :: ('b \<Rightarrow> 'r)). f (\<lambda>a. g a c) ::  'r" 
+
+definition "return a f = f a"
+
+type_synonym ('a, 'r) cont = "('a \<Rightarrow> 'r) \<Rightarrow> 'r"
+
+type_notation cont (infixr "\<leadsto>" 10)
+
+
+definition liftM :: "('a \<Rightarrow> 'b) \<Rightarrow> ('a, 'r) cont \<Rightarrow> ('b, 'r) cont" where
+  "liftM f m = bindCont m (return o f)"
+
+definition k_comp :: "('a \<Rightarrow> ('b, 'r) cont) =>  ('b \<Rightarrow> ('c, 'r) cont) => ('a \<Rightarrow> ('c, 'r) cont)" where 
+ "k_comp f g \<equiv> \<lambda>a. bindCont (f a) g"
+
+definition foldrM  where
+  "foldrM f xs = foldr (k_comp) (map f xs) (return)"
+
+definition mapM  where
+  "mapM f xs = foldrM (\<lambda>a xs. liftM (\<lambda>x. x # xs) f a) xs []" 
+
+lemma bindCont_return: "bindCont f return = f"
+  by (intro ext; clarsimp simp: bindCont_def return_def)
+
+
+lemma bindCont_return': "bindCont (return a) f = f a"
+  by (intro ext; clarsimp simp: bindCont_def return_def)
+
+lemma kcomp_assoc: "k_comp (k_comp f g) h = k_comp f (k_comp g h)"
+  by (intro ext; clarsimp simp: k_comp_def bindCont_def return_def)
+
+adhoc_overloading
+  bind bindCont
+               
+context constrained_atomic begin
+
+
+definition "select S f \<equiv> \<Squnion>x\<in>S. f x"  
+
+definition "getState f \<equiv>  (\<Squnion>a. \<tau> {a} ; f a)  "   
+
+definition "setState s f \<equiv> (\<pi> (UNIV \<triangleright> {s}) ; f () )"   
+
+definition "modifyState f = do { a <- (getState);  (setState (f a))}"
+
+definition "fail f = \<top> ; f undefined"
+
+definition "todo f = \<bottom> ; f undefined"
+
+
+definition "assertion P = do {a <- getState; (if (P a) then return a else fail)}"
+
+definition inc :: "(nat \<Rightarrow> nat option) \<Rightarrow> (nat \<Rightarrow> nat option)"
+  where "inc s = s (0 \<mapsto> 0 + 1)"
+
+definition "run f = (f (\<lambda>_. nil))"
+
+lemma in_dom_iff: "x \<in> A \<triangleleft> R \<longleftrightarrow> fst x \<in> A \<and> x \<in> R"
+  by (clarsimp simp: restrict_domain_def split: prod.splits)
+
+lemma in_ran_iff: "x \<in> R \<triangleright> A \<longleftrightarrow> snd x \<in> A \<and> x \<in> R"
+  apply (clarsimp simp: restrict_range_def split: prod.splits)
+  by (safe)
+
+lemma is_id: "{x} \<triangleleft> (UNIV \<triangleright> {x}) = {(x,x)}"
+  by (rule set_eqI; clarsimp simp: in_dom_iff in_ran_iff Id_on_iff)
+
+lemma "run (assertion (\<lambda>_. False)) = \<top>"
+  apply (clarsimp simp: modifyState_def assertion_def fail_def run_def bindCont_def getState_def setState_def pgm_test_pre is_id)
+  apply (rule antisym)
+   apply (subst Sup_le_iff; clarsimp)
+  by (metis NONDET_seq_distrib Nondet_test_nil order_top_class.top_greatest seq_nil_left)
+
+definition "compact c \<longleftrightarrow> (\<forall>S. S \<noteq> {} \<longrightarrow>  c \<le> \<Squnion> S \<longrightarrow> (\<exists>s\<in>S. c \<le> s))"
+
+lemma algebraic: "(x :: 'a) = \<Squnion>{y. y \<le> x \<and> compact y}" sorry
+
+end
 
 
     

@@ -142,6 +142,9 @@ lemma first_test_last_test_iff: "first (test t) \<le> test t \<longleftrightarro
   apply (safe)
   defer
    apply (meson first_le_test_iff flip.mono_f last_unit order_refl order_trans)
+  oops
+  sledgehammer
+  oops
   by (simp add: flip.first_test)
 
 lemma testE: "(\<And>c. first c = test t \<Longrightarrow> P (first c)) \<Longrightarrow> P (test t)"

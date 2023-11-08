@@ -1,5 +1,5 @@
 theory CRA_Atomic
-imports Seq_Atomic CRA_Obs
+imports Seq_Atomic CRA_Obs 
 begin
 
 locale sync_atomic_elem =  sync_semigroup + seq: seq_atomic  +  
@@ -38,43 +38,6 @@ lemma seq_atomic_nonaborting_sync':"f b (bottom b) \<notin> \<Omega> \<Longright
 
 lemma unit_closed_closed: "x \<le> unit_of y \<Longrightarrow> x \<le> unit_of x"
   oops
-  sledgehammer
-  oops
-  by (metis (no_types, opaque_lifting) down_unit mono_f
-             unit_of_apply dual_order.trans commute)
-
-
-lemma [simp]: "\<down>(f \<bottom>  (step l x)) = \<down>\<bottom>"
-  apply (safe; clarsimp simp: in_down_iff)
-  by (metis bot_conj_step dual_order.trans commute)
-
-
-lemma [simp]: "\<down>(f (step l x) \<bottom>  ) = \<down>\<bottom>"
-  apply (safe; clarsimp simp: in_down_iff)
-  by (metis bot_conj_step dual_order.trans commute)
-
-
-lemma [simp]: "\<down>(f \<bottom>  (step l x ; c)) = \<down>\<bottom>"
-  apply (safe; clarsimp simp: in_down_iff)
-  by (meson dual_order.trans mono_f order_refl preorder_bot_class.bot_least sync_step_test)
-
-
-
-lemma [simp]: "\<down>(f (step l x ; c) \<bottom>  ) = \<down>\<bottom>"
-  apply (safe; clarsimp simp: in_down_iff)
-  by (smt (z3) commute mono_f order_refl order_trans preorder_bot_class.bot_least sync_step_test)
-
-
-lemma [simp]: "\<down>(f (test t) \<bottom>  ) = \<down>\<bottom>"
-  apply (safe; clarsimp simp: in_down_iff)
-  by (meson dual_order.trans mono_f order_refl
-            preorder_bot_class.bot_least sync_step_test)
-
-
-lemma [simp]: "\<down>(f  \<bottom>  (test t) ) = \<down>\<bottom>"
-  apply (safe; clarsimp simp: in_down_iff)
-  by (metis (no_types, opaque_lifting) commute dual_order.trans mono_f
-             order_refl preorder_bot_class.bot_least sync_step_test)
 
 
 lemma mono_on_sync[simp]:  "mono_on UNIV (f)"
@@ -100,10 +63,6 @@ lemma mono_on_seq'[simp]:  "mono_on UNIV (\<lambda>x.  y ; x)"
   apply (rule mono_onI)
   by (meson order_refl seq.mono_f)
 
-lemma [simp]: "\<down>(f \<bottom> \<bottom>) = \<down>(\<bottom>)"
-  apply (safe; clarsimp simp: in_down_iff)
-  by (meson dual_order.trans mono_f preorder_bot_class.bot_least sync_step_test)
-
 
 lemma conj_conv_atomic_bot: "convolute \<bottom> (seq.datomic q) = \<bottom>"
   apply (transfer)
@@ -118,27 +77,13 @@ lemma conj_conv_atomic_bot: "convolute \<bottom> (seq.datomic q) = \<bottom>"
   by (meson bot_idemp dual_order.trans le_bottom_bottom_le mono_f)
 
 
-lemma nonempty_bot_union: "S \<noteq> {} \<Longrightarrow> \<Down> (S) \<union> \<Down> {\<bottom>} = \<Down>(S :: 'a :: preorder_bot set)"
-  by (metis Un_empty_right Un_insert_right down_down
-            down_union_distrib test_seq.insert_bot_nonempty
-            seq.test_seq_axioms)
 
 
-lemma nonempty_bot_union': "S \<noteq> {} \<Longrightarrow> \<Down> (S) \<union> \<down>\<bottom> = \<Down>(S :: 'a :: preorder_bot set)" 
-  apply (safe; clarsimp simp: in_down_iff)
-  apply (rule in_downsetI, clarsimp)
-  apply (rule_tac x=x in bexI)
-  using order_trans preorder_bot_class.bot_least apply blast
-  using downset_set_def by blast
 
 lemma le_test_seq_iff: "x \<le> test t ; c \<longleftrightarrow> (first x \<le> test t \<and> x \<le> c)"
   apply (safe)
   using seq.first_test apply blast
   oops
-  sledgehammer
-  oops
-   apply (meson dual_order.trans seq.test_le')
-  by (meson dual_order.trans seq.flip.unit_of_apply seq.mono_f)
 
 
 
@@ -386,9 +331,9 @@ end
 
 locale cra_atomic_iter = cra_atomic_elem +
  assumes command_split:  " x \<le> unit_of y \<Longrightarrow>
-        y \<in> \<Omega> \<or> (\<exists>t. x \<le> test t) \<or> (\<exists>l s x'. x <= step l s; x' \<and>  x' \<le> unit_of x' \<and> (l = Pgm \<or> l = Env) )"
+        x \<in> \<Omega> \<or> (\<exists>t. x \<le> test t) \<or> (\<exists>l s x'. x <= step l s; x' \<and>  x' \<le> unit_of x' \<and> (l = Pgm \<or> l = Env) )"
  assumes command_split_env:  " x \<le> to_env y \<Longrightarrow>
-        y \<in> \<Omega> \<or> (\<exists>t. x \<le> test t) \<or> (\<exists> s x'. x <= step Env s; x' \<and>  x' \<le> to_env x'  )"
+        x \<in> \<Omega> \<or> (\<exists>t. x \<le> test t) \<or> (\<exists> s x'. x <= step Env s; x' \<and>  x' \<le> to_env x'  )"
  assumes aborting_when: "(\<And>x. \<not> x \<le> unit_of x \<Longrightarrow> 
      \<exists>a y b n. finite_obs {Pgm, Env} n a \<and> conj y (bottom y) \<notin> \<Omega> \<and> first y \<le> last a \<and> x \<ge> a ; y ; b)" 
 assumes aborting_when': "\<not> x \<le> to_env x \<Longrightarrow> 
@@ -411,10 +356,6 @@ lift_definition llp :: " 'a downset \<Rightarrow> 'a downset" is "\<lambda>S. \<
   using conj.bot_le_unit_bot dual_order.trans apply blast
   using in_omega by blast
 
-lemma "x \<in> \<Omega> \<Longrightarrow> unit_of x \<in> \<Omega>"
-  apply (clarsimp)
-  sledgehammer
-  oops
 
 lemma iter_conj_dunit: "seq_elem_fiter.iter step_atomic.Atomic \<ge> conj.dunit"
   apply (rule seq_elem_fiter.iter_induct_nil)
@@ -426,9 +367,6 @@ lemma iter_conj_dunit: "seq_elem_fiter.iter step_atomic.Atomic \<ge> conj.dunit"
   apply (clarsimp)
    apply (frule command_split)
   apply (erule disjE; clarsimp?)
-  sledgehammer
-  oops
-  sledgehammer
   apply (erule_tac x="step l (a, b)" in ballE)
    apply (meson UNIV_I down_image_iff)
   apply (clarsimp simp: down_image_iff)
@@ -484,8 +422,6 @@ lemma step_test_last: "step l' (x, y) ; test y \<ge> step l' (x, y)"
   by(rule test_step')
 
 
-  by (meson cs.seq.unit_of_unit order_eq_refl step_last)
-
 (* lemma le_step_ge_nonterm_step:"b \<le> step l s \<Longrightarrow> b \<le> \<bottom> \<or> step l s ; \<bottom> \<le> b"
   apply (drule order_trans[where z="step l s ; test (snd s)"])
    apply (metis cs.seq.unit_of_unit last_step old.prod.exhaust order_eq_refl snd_conv)
@@ -526,7 +462,6 @@ lemma prime_seq:  " prime (step l (a, b) ; A) = (prime (step l (a, b))) \<Zsemi>
    apply (meson in_omega omega_mono par_sync.seq_omega_closed)
   by (meson in_omega omega_mono par_sync.seq_omega_closed)
 
-find_theorems "?y \<le> ?y ; last ?y"
 
 lemma last_bot_trans:"x \<le> y ; z \<Longrightarrow> last y \<le> bottom b \<Longrightarrow> x \<le> y ; bottom b"
   apply (drule order_trans)
@@ -594,7 +529,7 @@ lemma atomic_inf: "(step_atomic.Atomic \<Zsemi> b) \<sqinter> (step_atomic.Atomi
 
 lemma atomic_inf': "(datomic A \<Zsemi> b) \<sqinter> (datomic B \<Zsemi> c) = (datomic (A \<sqinter> B) \<Zsemi> (b \<sqinter> c))"
   sorry
-  apply (rule antisym, clarsimp simp: less_eq_downset_def inf_downset_def step_atomic.Atomic_def)
+ (*  apply (rule antisym, clarsimp simp: less_eq_downset_def inf_downset_def step_atomic.Atomic_def)
    apply (transfer)
    apply (clarsimp simp: in_down_iff)
    apply (elim disjE; clarsimp simp: down_sup_distrib down_union_distrib down_image_iff)
@@ -625,7 +560,7 @@ lemma atomic_inf': "(datomic A \<Zsemi> b) \<sqinter> (datomic B \<Zsemi> c) = (
     apply (meson IntI UnCI bot_least_trans in_down_iff)
   apply (meson cs.seq.aborting cs.seq.bot_annihilate_seq cs.seq.flip.mono_f order_trans)
   by (simp add: cs.seq.down_seq_distrib_right.seq_mono)
-
+*)
 
 
 lemma step_matching_labels: "x \<le> step l s \<Longrightarrow> x \<le> step l' s \<Longrightarrow> x \<in> \<Omega> \<or> l = l'"
@@ -637,7 +572,7 @@ lemma step_matching_labels: "x \<le> step l s \<Longrightarrow> x \<le> step l' 
 
 lemma atomic_inf_l: "(datomic_l l A \<Zsemi> b) \<sqinter> (datomic_l l' B \<Zsemi> c) = (datomic_l (l \<sqinter> l') (A \<sqinter> B) \<Zsemi> (b \<sqinter> c))"
   sorry
-  apply (rule antisym, clarsimp simp: less_eq_downset_def inf_downset_def step_atomic.Atomic_def)
+ (*  apply (rule antisym, clarsimp simp: less_eq_downset_def inf_downset_def step_atomic.Atomic_def)
    apply (transfer)
    apply (clarsimp simp: in_down_iff)
    apply (case_tac "x \<le> \<bottom>")
@@ -666,7 +601,7 @@ lemma atomic_inf_l: "(datomic_l l A \<Zsemi> b) \<sqinter> (datomic_l l' B \<Zse
     apply (clarsimp simp: less_eq_downset_def, transfer, clarsimp simp: down_image_iff in_Down_iff)
   using IntD1 image_is_empty down_image_iff apply fastforce
   by (simp add: cs.seq.down_seq_distrib_right.seq_mono)
-
+*)
  
   
 lemma prime_datomic_l: "prime (step l s) = datomic_l {l} {s}"
@@ -686,16 +621,7 @@ lemma datomic_inf_pgm_env: "((datomic_l {Pgm} P \<Zsemi> A) \<sqinter> (datomic_
   apply (safe; clarsimp simp: in_down_iff)
    apply (meson in_omega omega_mono par_sync.seq_omega_closed)
   by (metis Int_iff cs.seq.last_unit in_omega inf.order_iff last_omega_closed)
-  oops
-  apply (clarsimp simp: inf_downset_def, transfer)
-  apply (safe; clarsimp simp: in_down_iff down_image_iff)
-       apply (meson cs.seq.mono_f no_pgm_env order_eq_refl refine_trans)
-      apply (meson cs.seq.aborting cs.seq.bot_annihilate_seq cs.seq.flip.mono_f dual_order.trans)
-  apply (meson cs.seq.aborting cs.seq.bot_annihilate_seq cs.seq.flip.mono_f dual_order.trans)
-    apply (meson cs.seq.aborting cs.seq.bot_annihilate_seq cs.seq.flip.mono_f dual_order.trans) 
-   apply blast
-  apply blast
-  done
+ 
 
 lemma finite_is_finite: "finite_obs l i x \<Longrightarrow>  cs.seq.conv_test.seq_power (datomic_l l UNIV) i \<sqinter> prime (x) = prime (x)"
   apply (induct x rule: finite_obs.induct)
@@ -786,18 +712,13 @@ lemma first_step_seq: "first (step l s) \<ge> first (step l s ; c)"
 lift_definition First :: " 'a downset \<Rightarrow> 'a downset"  is "\<lambda>S. \<Down>(first ` (S - \<Omega>)) \<union> \<Omega> "
   apply (clarsimp simp: down_sup_distrib down_union_distrib)
   done
-  apply ( clarsimp simp: image_iff down_image_iff)
-  by (meson cs.bottom_seq_omega cs.seq.flip.bot_idemp cs.seq.flip.bot_le_unit_bot dual_order.trans in_mono omega_mono)
-
 
 lemma first_seq: "first (y ; y') \<le> first y"
   by (meson cs.seq.flip.assoc cs.seq.flip.mono_f order_refl order_trans sp.first_le_first_iff)
 
 lemma test_lower_bound: "x \<notin> \<Omega> \<Longrightarrow> x \<le> test t \<Longrightarrow> x \<le> test t' \<Longrightarrow> t = t'"
   by (meson cs.seq.test_atom cs.seq.test_le dual_order.trans in_omega)
-  oops
 
-  find_theorems "_ - _" \<Down>
 
   
   
@@ -1068,8 +989,8 @@ lemma rewrite: "(x \<sqinter> y) \<squnion> (z \<sqinter> y) = (x \<squnion> z) 
   by (simp add: inf_sup_distrib2)
 
 lemma last_test_le: "last (test t) \<le> (test t)"
-  using cs.seq.first_test_last_test_iff cs.seq.flip.first_test by auto
-
+  by (smt (z3) \<Omega>_def cs.seq.down_last cs.seq.flip.down_unit cs.seq.flip.unit_of_apply cs.seq.last_unit cs.seq.not_bot_testable 
+      cs.seq.test_is_first cs.seq.test_le dual_order.trans finite_obs.testI finite_obs_not_bot in_Down_iff rangeI)
 
 lemma last_test_ge: "last (test t) \<ge> (test t)"
   by (metis DiffD2 cs.seq.flip.down_unit cs.seq.last_unit cs.seq.test_is_first cs.seq.test_nil in_omega rangeI)
@@ -1136,17 +1057,13 @@ lemma prefix_test_eq': "last b \<ge> first A \<Longrightarrow> prime (last b) \<
   apply (clarsimp)
   apply (rule antisym)
   sorry
-  oops
+  
 
 
 
 lemma last_seq_r: "first A \<le> test b \<Longrightarrow> last (step l (a, b) ; A) \<le> last A" 
   apply (rule order_trans, rule cs.seq.last_first_seq)
   sorry
-  sledgehammer
-  
-  oops
-  by (metis cs.seq.assoc cs.seq.flip.mono_f cs.seq.unit_of_unit order_refl)
 
 
 lemma last_step_seq: "test b \<ge> first A \<Longrightarrow> last (step l (a, b) ; A) \<ge> last A"
@@ -1174,7 +1091,7 @@ lemma finite_obs_seq_step: "finite_obs ls i x \<Longrightarrow>  prime x \<Zsemi
 lemma prefix_test_eq'': "prime (last b) \<ge> First A \<Longrightarrow> prime (last b) \<Zsemi> ( A) =  ( A)"
   apply (clarsimp simp: less_eq_downset_def)
   sorry
-  apply (transfer; clarsimp, intro set_eqI iffI; clarsimp simp: in_down_iff)
+  (* apply (transfer; clarsimp, intro set_eqI iffI; clarsimp simp: in_down_iff)
   apply (metis cs.seq.down_unit cs.seq.flip.down_unit cs.seq.flip.mono_f cs.seq.flip.unit_of_apply in_Down_iff refine_trans)
   apply (case_tac "A \<le> \<bottom>")
   apply blast
@@ -1184,7 +1101,7 @@ lemma prefix_test_eq'': "prime (last b) \<ge> First A \<Longrightarrow> prime (l
   apply (metis cs.seq.first_last rangeE rangeI sp.first_le_first_iff)
    apply (drule_tac c="first x" in subsetD)
   using down_image_iff apply blast
-  by (clarsimp simp: in_down_iff)+
+  by (clarsimp simp: in_down_iff)+ *)
 
 lemma le_first_le_test: "x \<le> first y \<Longrightarrow> x \<in> \<Omega> \<or> (\<exists>t. x \<ge> test t \<and> x \<le> test t)"
   by (meson cs.seq.not_bot_testable' cs.seq.test_atom dual_order.trans in_omega)
@@ -1196,13 +1113,9 @@ lemma First_inf: "First (c \<sqinter> d) \<le> (First c \<sqinter> First d)"
   apply (clarsimp simp: in_down_iff down_image_iff)
   by (metis DiffI in_omega)
 
-lemma greater_botI:"((x :: 'a :: preorder_bot) \<le> \<bottom> \<Longrightarrow> False) \<Longrightarrow> x > \<bottom>"
-  oops
-  by (meson less_le_not_le preorder_bot_class.bot_least)
 
 lemma not_aborting_not_aborting_seq: 
  "bottom x < a \<iinter> bottom y \<Longrightarrow> (a ; bottom z) \<iinter> bottom y >  bottom x"
-
   sorry
 
 
@@ -1282,7 +1195,7 @@ lemma not_environment_test_False: "not_environment a \<Longrightarrow> a  \<le> 
 
 lemma not_aborting_iter'': "not_environment a \<Longrightarrow> prime (a) \<Zsemi> c \<le> seq_elem_fiter.iter (datomic_l {Env} UNIV) \<sqinter> (prime a \<Zsemi> c)  \<Longrightarrow> False"
   sorry
-  apply (drule le_inf_iff_simple)
+ (*  apply (drule le_inf_iff_simple)
    apply (clarsimp simp: less_eq_downset_def seq_elem_fiter.iter_def gfp_def inf_downset_def sup_downset_def step_atomic.Atomic_def )
   apply (clarsimp simp: cs.seq.conv_test_pre.nil_def)
  apply (transfer)
@@ -1294,13 +1207,12 @@ lemma not_aborting_iter'': "not_environment a \<Longrightarrow> prime (a) \<Zsem
    apply (elim disjE; clarsimp simp: down_image_iff in_down_iff)
     apply (meson cs.seq.test_seq_test dual_order.trans not_environment_def)
    apply (erule (1) not_environment_step_False)
-  by (meson in_down_bot_trans in_down_iff not_environment_def)
+  by (meson in_down_bot_trans in_down_iff not_environment_def) *)
  
 
 
 lemma le_first_le_test': "x \<le> first y \<Longrightarrow> \<exists>t. x \<le> test t"
   oops
-  using le_first_le_test sp.le_bot_le_any by blast
 
 lemma first_iter_atomic: "First (seq_elem_fiter.iter (datomic_l l UNIV)) = cs.seq.dtest UNIV"
   apply (clarsimp simp: seq_elem_fiter.iter_def gfp_def sup_downset_def less_eq_downset_def)
@@ -1308,9 +1220,6 @@ lemma first_iter_atomic: "First (seq_elem_fiter.iter (datomic_l l UNIV)) = cs.se
   apply (transfer)
   apply (safe; clarsimp simp: in_down_iff down_image_iff)
   apply (meson in_omega le_first_le_test)
-    apply (elim disjE; clarsimp?)
-     apply (erule le_first_le_test')
-    apply (erule le_first_le_test')
    apply (rule_tac x="test y" in bexI)
   using cs.seq.first_test_test' dual_order.trans apply blast
   apply (clarsimp)
@@ -1440,7 +1349,7 @@ lemma le_llp_if: "(\<And>x i d s a . finite_obs {Pgm, Env} i x \<Longrightarrow>
 lemma not_env_iter: "(\<And>x i d s a ls. finite_obs (\<eta> Env) i x \<Longrightarrow> not_environment a \<Longrightarrow> first a \<le> last x \<Longrightarrow>   prime x  \<Zsemi> prime a \<Zsemi> d \<le> c \<Longrightarrow> False) \<Longrightarrow> c \<le> par.dunit"
   apply (clarsimp simp: less_eq_downset_def  )
   sorry
-  apply (transfer, clarsimp simp: down_image_iff)
+ (*  apply (transfer, clarsimp simp: down_image_iff)
   apply (rule_tac x="x" in exI)
   apply (atomize)
   apply (erule contrapos_pp, clarsimp)
@@ -1458,7 +1367,7 @@ lemma not_env_iter: "(\<And>x i d s a ls. finite_obs (\<eta> Env) i x \<Longrigh
    apply (rule order_trans[rotated], assumption)
   apply (erule order_trans)
    apply (smt (verit, del_insts) cs.seq.assoc cs.seq.mono_f refine_trans)
-  done
+  done *)
 
 lemma  iter_env_always: "finite_obs {Env} i x \<Longrightarrow> not_environment a \<Longrightarrow> last x \<ge> first a \<Longrightarrow>  prime x \<Zsemi> prime a \<Zsemi> c \<le> seq_elem_fiter.iter (datomic_l {Env} UNIV) \<Longrightarrow> False"
   apply (subst (asm)  inf.absorb_iff2)
@@ -1525,7 +1434,7 @@ sublocale atomic_conv_conj_seq_elem: conj_atomic cs.seq.convolute cs.seq.conv_te
       apply (frule step_meet', rule order_refl)
       apply (elim disjE; clarsimp?)
         apply (metis Diff_iff cs.seq.test_nil in_omega last_step' omega_mono rangeI)
-  sledgehammer
+  
   thm conj_sync.bot_conj_step
   sorry
       apply (smt (verit, ccfv_SIG) conj.covering conj.unit_of_unit conj_sync.bot_conj_step
@@ -1589,6 +1498,38 @@ sublocale atomic_conv_commands: atomic_commands cs.seq.convolute cs.seq.conv_tes
     apply (simp add: cs.exchange_convolute.exchange)
    apply (simp add: exchange_convolute.exchange)
   using sp.exchange_convolute.exchange by presburger
+
+lemma test_neq_first_in_omega: "t \<noteq> a \<Longrightarrow> test t ; (step l (a, b)) \<in> \<Omega>"
+  by (meson cs.seq.flip.assoc' cs.seq.mono_f omega_mono order_refl sp.omega_seq sp.test_seq_eq test_step)
+  
+
+sublocale atomic_conv_commands: atomic_test_commands cs.seq.convolute  datomic par.convolute "datomic_l {Env} UNIV" conj.convolute cs.seq.dtest
+   apply (standard)
+         apply auto[1]
+        apply (simp add: atomic_conv_commands.chaos_ref_nil)
+       apply (simp add: cs.seq_sync_test.seq_conj_interchange)
+  using cs.seq_sync_test.sync_abort_right apply blast
+     apply (simp add: atomic_conv_commands.chaos_par_magic)
+    apply (simp add: sp.seq_sync_test.seq_conj_interchange)
+   apply (simp add: sp.seq_sync_test.sync_abort_right)
+  apply (rule_tac x="{(l, s, s'). s \<in> p1} \<inter> p2" in exI)
+  apply (transfer; clarsimp)
+  apply (safe; clarsimp simp: in_Down_iff in_down_iff)
+       apply (case_tac "xc = aa"; clarsimp?)
+  apply (rule_tac x="(a, aa, b)" in bexI, clarsimp)
+         apply (meson cs.seq.flip.mono_f cs.seq.test_le' refine_trans)
+  apply (clarsimp)
+       apply (smt (verit, ccfv_SIG) cra_atomic_iter.test_neq_first_in_omega cra_atomic_iter_axioms cs.seq.flip.mono_f in_omega omega_mono)
+      apply (meson cs.seq.first_test_test' cs.seq.flip.down_unit cs.seq.flip.mono_f order_trans)
+     apply (meson in_omega omega_mono par_sync.seq_omega_closed)
+    apply (meson in_omega omega_mono par_sync.seq_omega_closed)
+   apply (rule_tac x="test aa" in bexI, intro disjI1)
+    apply (rule_tac x=" step a (aa, b)" in bexI)
+     apply (meson order_trans test_step)
+    apply (clarsimp simp: in_Down_iff)
+  using down_image_iff apply blast
+  by (meson cs.seq.last_unit in_omega last_omega_closed)
+  
 end
 
 end
