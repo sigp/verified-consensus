@@ -138,6 +138,7 @@ lemma test_is_last: "\<exists>c. last c = test t"
 lemma first_le_test_iff: "(first a) \<le> test t \<longleftrightarrow> a \<le> (test t) ; a "
   by (rule flip.unit_of_unit)
 
+(*
 lemma first_test_last_test_iff: "first (test t) \<le> test t \<longleftrightarrow> last (test t) \<le> test t"
   apply (safe)
   defer
@@ -146,6 +147,7 @@ lemma first_test_last_test_iff: "first (test t) \<le> test t \<longleftrightarro
   sledgehammer
   oops
   by (simp add: flip.first_test)
+*)
 
 lemma testE: "(\<And>c. first c = test t \<Longrightarrow> P (first c)) \<Longrightarrow> P (test t)"
   by (insert test_is_first[where t=t], clarsimp)
