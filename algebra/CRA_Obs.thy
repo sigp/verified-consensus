@@ -156,6 +156,7 @@ lemma test_seq_eq: "\<not>(test t ; (test xa) \<in> \<Omega>) \<Longrightarrow> 
 
 lemma par_conv_test_inf: "sync.convolute (seq.dtest p) (seq.dtest q) = (seq.dtest p \<sqinter> seq.dtest q) "
   sorry
+(*
   apply (clarsimp simp: inf_downset_def, transfer)
   apply (case_tac "p = {}", clarsimp)
    apply (safe; clarsimp simp: in_Down_iff in_down_iff)
@@ -171,6 +172,7 @@ lemma par_conv_test_inf: "sync.convolute (seq.dtest p) (seq.dtest q) = (seq.dtes
                                                        rewrite_sup_helper'' rewrite_sup_helper''')
   apply (safe; clarsimp simp: in_Down_iff in_down_iff)
   sledgehammer
+
         apply (meson bot_test dual_order.trans le_bot_le_any par.mono_f)
        apply (metis dual_order.trans le_bot_par par.commute)
   using le_bot_le_any in_down_iff apply blast
@@ -190,6 +192,7 @@ lemma par_conv_test_inf: "sync.convolute (seq.dtest p) (seq.dtest q) = (seq.dtes
   defer
    apply (metis (no_types, opaque_lifting) dual_order.trans nil_par_nil_weak preorder_bot_class.bot_least seq.test_atom seq.test_le)
   by (meson dual_order.trans order_eq_refl par.commute par.down_unit par.mono_f test_to_env)
+*)
 
 
 lemma first_le_first_iff: "first x \<le> first (c) \<longleftrightarrow> x \<le> first c ; x "
