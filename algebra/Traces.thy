@@ -2000,8 +2000,6 @@ thm seq_trace_def
 lemma first_le_last_cases: "first_trace y \<le> last_trace x \<Longrightarrow> first_trace y = last_trace x "
   apply (clarsimp simp: first_trace_def split: if_splits)
   by (metis first_last_last first_trace_def init_refD init_trace trace_init_empty_iff)
-  oops
-  by (metis failed_first_iff first_last_last last_first_last le_bottom_iff nonfailed_ref)
 
 lemma first_last_matching: "first_trace y \<le> last_trace x \<Longrightarrow> last_trace y \<le> last_trace (seq_trace x y)"
   apply (frule first_le_last_cases, clarsimp?)
@@ -2119,7 +2117,7 @@ lemma sync_incomplete': "sync_step f  (Inr x) (Inr Incomplete) = (if x = Abort t
 lemma sync_step_conj_mono: "x \<le> y \<Longrightarrow> a \<le> b \<Longrightarrow> ref_step (sync_step conj_sync (index (tr x) n) (index (tr a) n)) (sync_step conj_sync (index (tr y) n) (index (tr b) n))" 
   apply (drule less_eq_ref_stepD[where n=n])
   
-  apply (drule less_eq_ref_stepD[where n=n]) back
+  apply (drule less_eq_ref_stepD[where n=n])
   apply (case_tac "index (tr x) n"; case_tac "index (tr a) n"; case_tac "index (tr y) n"; case_tac "index (tr b) n"; clarsimp)
        apply (case_tac ba; clarsimp)
     apply (case_tac ba; clarsimp)
@@ -4011,7 +4009,6 @@ lemma le_par_stepsD:"x \<le> par_t (atomic_trace l s) (atomic_trace l' s') \<Lon
     apply (simp add: atomic_trace_simp)
    apply (elim disjE; clarsimp simp: label_map_def split: if_splits)
     apply (subgoal_tac "x \<le> atomic_trace labels.Pgm (fst s, snd s)")
-     apply (elim disjE; clarsimp )
      apply (clarsimp simp: atomic_trace_simp)
      apply (rule_tac x="labels.Pgm" in exI, clarsimp, rule exI, rule exI, intro conjI)
       apply (assumption)
