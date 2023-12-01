@@ -1,7 +1,7 @@
 section \<open>Conditionals\<close>
   
 theory If_Statement
-imports
+imports   
   "Expressions"
 begin
 
@@ -91,11 +91,7 @@ proof -
                     ((rely r) \<iinter> \<lbrace>p\<rbrace>;\<lparr>r\<^sup>* \<triangleright> (b1 \<inter> p)\<rparr>);((rely r) \<iinter> \<lbrace>b1 \<inter> p\<rbrace>; \<lparr>q\<rparr>) \<squnion>
                     ((rely r) \<iinter> \<lbrace>p\<rbrace>;\<lparr>r\<^sup>* \<triangleright> {}\<rparr>);\<top>);idle" (is "_ \<ge> ?rhs")
     using sup_mono seq_mono_left rely_seq_distrib conj_abort_right
-<<<<<<< HEAD
-    by (metis (no_types, opaque_lifting) assert_bot seq_assoc seq_abort)
-=======
     by (metis (no_types) assert_bot seq_assoc seq_abort)
->>>>>>> a87ff0585792b159a497ae6dae5b85c93f31726d
   also have "?rhs \<ge> (\<lbrakk>b\<rbrakk>(true);((rely r) \<iinter> \<lbrace>b0 \<inter> p\<rbrace>; \<lparr>q\<rparr>) \<squnion>
                     \<lbrakk>b\<rbrakk>(false);((rely r) \<iinter> \<lbrace>b1 \<inter> p\<rbrace>; \<lparr>q\<rparr>) \<squnion>
                     (\<Squnion>k\<in>-{true,false}. \<lbrakk>b\<rbrakk>(k));\<top>);idle" (is "_ \<ge> ?rhs")
