@@ -55,29 +55,29 @@ record SyncCommittee =
   aggregate_pubkey_f :: PublicKey
 
 record BeaconState =
-  genesis_time_f :: u64
-  genesis_validators_root_f :: Hash256
-  slot_f :: Slot
-  fork_f :: Fork
-  latest_block_header_f :: BeaconBlockHeader
-  block_roots_f :: "Hash256 Vector"
-  state_roots_f :: "Hash256 Vector"
-  historical_roots_f :: "Hash256 List"
-  eth1_data_f :: Eth1Data
-  eth1_data_votes_f :: "Eth1Data List"
-  eth1_deposit_index_f :: u64
-  validators_f :: "Validator List"
-  balances_f :: "u64 List"
-  randao_mixes_f :: "Hash256 Vector"
-  slashings_f :: "u64 Vector"
-  previous_epoch_participation_f :: "ParticipationFlags List"
-  current_epoch_participation_f :: "ParticipationFlags List"
-  justification_bits_f :: Bitvector
-  previous_justified_checkpoint_f :: Checkpoint
-  current_justified_checkpoint_f :: Checkpoint
-  finalized_checkpoint_f :: Checkpoint
-  inactivity_scores_f :: "u64 List"
-  current_sync_committee_f :: SyncCommittee
-  next_sync_committee_f :: SyncCommittee
+  genesis_time_f :: "u64 option"
+  genesis_validators_root_f :: "Hash256 option"
+  slot_f :: "Slot option"
+  fork_f :: "Fork option"
+  latest_block_header_f :: "BeaconBlockHeader option"
+  block_roots_f :: "Hash256 Vector option"
+  state_roots_f :: "Hash256 Vector option"
+  historical_roots_f :: "Hash256 List option"
+  eth1_data_f :: "Eth1Data option"
+  eth1_data_votes_f :: "Eth1Data List option"
+  eth1_deposit_index_f :: "u64 option"
+  validators_f :: "Validator List option"
+  balances_f :: "u64 List option"
+  randao_mixes_f :: "Hash256 Vector option"
+  slashings_f :: "u64 Vector option"
+  previous_epoch_participation_f :: "ParticipationFlags List option"
+  current_epoch_participation_f :: "ParticipationFlags List option"
+  justification_bits_f :: "Bitvector option"
+  previous_justified_checkpoint_f :: "Checkpoint option"
+  current_justified_checkpoint_f :: "Checkpoint option"
+  finalized_checkpoint_f :: "Checkpoint option"
+  inactivity_scores_f :: "u64 List option"
+  current_sync_committee_f :: "SyncCommittee option"
+  next_sync_committee_f :: "SyncCommittee option"
 
 end
