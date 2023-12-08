@@ -49,7 +49,10 @@ consts
   read :: "'a \<Rightarrow> ('b, 'c) cont"
 
 consts 
-  write_to :: "'a \<Rightarrow> 'b \<Rightarrow> (unit, 'c) cont" ("_ ::= _" [1000, 13] 13)
+  write_to :: "'a \<Rightarrow> 'b \<Rightarrow> (unit, 'c) cont" 
+
+abbreviation modify :: "'a \<Rightarrow> ('b \<Rightarrow> 'b) \<Rightarrow> (unit, 'c) cont" where
+   "modify a f \<equiv> (bindCont (read a) (\<lambda>x. write_to a (f x)))"
 
 
 definition "genesis_time = Lens genesis_time_f (\<lambda>a b. a\<lparr>genesis_time_f := b\<rparr> )"
@@ -99,6 +102,21 @@ definition "inactivity_scores = Lens inactivity_scores_f  (\<lambda>a b. a\<lpar
 definition "current_sync_committee = Lens current_sync_committee_f  (\<lambda>a b. a\<lparr>current_sync_committee_f := b\<rparr> )"
 
 definition "next_sync_committee = Lens next_sync_committee_f  (\<lambda>a b. a\<lparr>next_sync_committee_f := b\<rparr> )"
+
+
+
+
+syntax
+  "_mod_expr" :: "'a \<Rightarrow> 'b \<Rightarrow> 'c " ("_ ::= _" [1000, 13] 13)
+
+
+translations
+ "_mod_expr a b" \<rightharpoonup> "CONST modify a (\<lambda>a. b)"
+
+definition foo where 
+   "foo x y \<equiv>  (x ::= y)"
+
+thm foo_def
 
 (*
 
@@ -209,7 +227,7 @@ definition write_list :: "'var \<Rightarrow> heap_value list \<Rightarrow> (unit
 definition write_u8 :: "'var \<Rightarrow> 8 word \<Rightarrow> (unit, 'a) cont" where
   "write_u8 p x \<equiv> do {state <- getState;
                          _ <- lift_option (do {v <- (snd state p); if (is_u8 v) then Some True else None});
-                         _ <- setState ((fst state), (snd state)(p := Some (u8 x))); return ()}"
+                        setState ((fst state), (snd state)(p := Some (u8 x)))}"
 
 
 definition write_u64 :: "'var \<Rightarrow> 64 word \<Rightarrow> (unit, 'a) cont" where
@@ -284,8 +302,9 @@ definition get_eligible_validator_indices' :: "(u64 list, 'a) cont" where
     undefined
   }"
 
-abbreviation set_justified_checkpoint :: "Checkpoint \<Rightarrow> (unit, 'a) cont"
-  where "set_justified_checkpoint n \<equiv> current_justified_checkpoint ::= n"
+
+definition set_justified_checkpoint :: "Checkpoint \<Rightarrow> (unit, 'a) cont"
+  where "set_justified_checkpoint n \<equiv> (current_justified_checkpoint ::= n)"
 
 
 definition get_current_epoch :: "(Epoch, 'a) cont" where
@@ -322,7 +341,7 @@ where
                                         previous_epoch_target_balance
                                         current_epoch_target_balance \<equiv> do {
      previous_epoch <- get_previous_epoch;
-     current_epoch <- get_current_epoch;
+     current_epoch  <- get_current_epoch;
      old_previous_justified_checkpoint <- read previous_justified_checkpoint;
      old_current_justified_checkpoint  <- read current_justified_checkpoint;
      _ <- (current_justified_checkpoint ::= old_current_justified_checkpoint);
@@ -336,16 +355,13 @@ where
            bits <- read justification_bits;
            let updated_justification_bits = bitvector_update bits 1 False;
            block_root <- get_block_root previous_epoch;
-           cjc <- read current_justified_checkpoint; 
-           _  <- (current_justified_checkpoint ::= cjc\<lparr>epoch_f := previous_epoch, root_f := block_root\<rparr>);
-           _  <- (justification_bits ::= updated_justification_bits);
-          return ()} else return ());
+           _  <- (current_justified_checkpoint ::= current_justified_checkpoint\<lparr>epoch_f := previous_epoch, root_f := block_root\<rparr>);
+          (justification_bits ::= updated_justification_bits)} else return ());
      (if current_epoch_target_x3 \<ge> total_active_balance_x2 then do {
            bits <- read justification_bits;
            let updated_justification_bits = bitvector_update bits 0 False;
            block_root <- get_block_root previous_epoch;
-           cjc <- read current_justified_checkpoint; 
-           _ <- (current_justified_checkpoint ::= cjc\<lparr>epoch_f := current_epoch, root_f := block_root\<rparr>);
+           _ <- (current_justified_checkpoint ::= current_justified_checkpoint\<lparr>epoch_f := current_epoch, root_f := block_root\<rparr>);
           (justification_bits ::= updated_justification_bits)} else return ());
      bits <- read justification_bits;
      x <- lift_option (epoch_f old_previous_justified_checkpoint .+ Epoch (Unsigned.u64 3));
@@ -359,6 +375,208 @@ where
      (if (bitvector_all bits 0 2 \<and> x = current_epoch) then 
         (finalized_checkpoint ::= old_previous_justified_checkpoint) else return ())  
      }"
+
+term list_inner
+
+definition get_active_validator_indices :: "Epoch \<Rightarrow> (u64 list, 'a) cont" where
+  "get_active_validator_indices  e \<equiv> do {
+    v <- read validators; 
+    return ([i. (i, v) \<leftarrow> enumerate (list_inner v), is_active_validator v e])}"
+
+definition get_eligible_validator_indices :: "(u64 list, 'a) cont" where
+  "get_eligible_validator_indices \<equiv> do {
+    previous_epoch <- get_previous_epoch ;
+    previous_epoch_p1 \<leftarrow> lift_option (previous_epoch .+ Epoch (Unsigned.u64 1));
+    v <- read validators; 
+    return [i. (i, v) \<leftarrow> enumerate (list_inner v),
+            is_active_validator v previous_epoch \<or>
+            (slashed_f v \<and> previous_epoch_p1 < withdrawable_epoch_f v)]
+  }"
+
+
+definition get_unslashed_participating_indices ::
+   " nat \<Rightarrow> Epoch \<Rightarrow> (u64 set, 'a) cont"
+where
+  "get_unslashed_participating_indices flag_index e \<equiv> do {
+    previous_epoch <- get_previous_epoch ;
+    current_epoch <- get_current_epoch ;
+    _ \<leftarrow> assertion (\<lambda>_. e = previous_epoch \<or> e = current_epoch);
+    epoch_participation <- (if e = current_epoch then read current_epoch_participation
+                                                 else read previous_epoch_participation);
+    active_validator_indices <- get_active_validator_indices e;
+    let participating_indices = [
+      i.
+      i \<leftarrow> active_validator_indices,
+      has_flag (unsafe_list_index epoch_participation i) flag_index
+    ];
+    v <- read validators;
+    return (
+      list.set (
+        filter (\<lambda>index. \<not> slashed_f (unsafe_list_index v index))
+               participating_indices))
+  }"
+
+
+definition get_total_balance :: " u64 set \<Rightarrow> (u64, 'a) cont" where
+  "get_total_balance indices \<equiv> do {
+    v <- read validators;
+    total \<leftarrow> lift_option (safe_sum ((\<lambda>i. effective_balance_f (unsafe_list_index (v) i)) ` indices));
+    return (max (EFFECTIVE_BALANCE_INCREMENT config) total)
+  }"
+
+
+definition get_total_active_balance :: " (u64, 'a) cont" where
+  "get_total_active_balance  \<equiv> do {
+   current_epoch <- get_current_epoch;
+   inds <- get_active_validator_indices current_epoch;
+   get_total_balance (list.set inds)} "
+
+definition process_justification_and_finalization ::
+  " (unit, 'a) cont"
+where
+  "process_justification_and_finalization \<equiv> do {
+     previous_epoch <- get_previous_epoch;
+     current_epoch <- get_current_epoch;
+     epoch1 \<leftarrow> lift_option (GENESIS_EPOCH .+ Epoch (Unsigned.u64 1));
+    if current_epoch \<le> epoch1 then
+      return ()
+    else do {
+      previous_indices \<leftarrow> 
+        get_unslashed_participating_indices TIMELY_TARGET_FLAG_INDEX previous_epoch;
+      current_indices \<leftarrow>
+        get_unslashed_participating_indices TIMELY_TARGET_FLAG_INDEX current_epoch;
+      total_active_balance    \<leftarrow> get_total_active_balance;
+      previous_target_balance \<leftarrow> get_total_balance  previous_indices;
+      current_target_balance  \<leftarrow> get_total_balance  previous_indices;
+      weigh_justification_and_finalization
+         total_active_balance previous_target_balance current_target_balance
+    }
+  }"
+
+term mapM
+
+
+definition get_base_reward_per_increment :: " (u64, 'a) cont" where
+  "get_base_reward_per_increment \<equiv> do {
+    total_active_balance \<leftarrow> get_total_active_balance;
+    sqrt_total_active_balance \<leftarrow> lift_option (integer_squareroot total_active_balance);
+    x <- lift_option (EFFECTIVE_BALANCE_INCREMENT config .* BASE_REWARD_FACTOR config);
+    lift_option (sqrt_total_active_balance \\ x)
+  }"
+
+definition get_base_reward :: " u64 \<Rightarrow> (u64, 'a) cont" where
+  "get_base_reward index \<equiv> do {
+    v <- read validators;
+    validator \<leftarrow> lift_option (list_index v index);
+    increments \<leftarrow> lift_option (effective_balance_f validator \\ EFFECTIVE_BALANCE_INCREMENT config);
+    base_reward_per_increment \<leftarrow> get_base_reward_per_increment;
+    lift_option (increments .* base_reward_per_increment)
+  }"
+
+
+definition get_finality_delay :: " (u64, 'a) cont" where
+  "get_finality_delay \<equiv> do {
+    previous_epoch <- get_previous_epoch;
+    final <- read finalized_checkpoint;
+    lift_option ( epoch_to_u64 previous_epoch .- epoch_to_u64 (epoch_f final))}"
+
+definition is_in_inactivity_leak :: "(bool, 'a) cont" where
+  "is_in_inactivity_leak \<equiv> do {
+    finality_delay \<leftarrow> get_finality_delay;
+    return (finality_delay > MIN_EPOCHS_TO_INACTIVITY_PENALTY config)
+  }"
+
+definition get_flag_index_deltas ::
+  "nat \<Rightarrow> ((u64 list \<times> u64 list), 'a) cont"
+where
+  "get_flag_index_deltas flag_index \<equiv> do {
+    v <- read validators;
+    let init_rewards = [(Unsigned.u64 0). _ \<leftarrow> [0..<length (list_inner v)]];
+    let init_penalties = init_rewards;
+    previous_epoch <- get_previous_epoch;
+    unslashed_participating_indices \<leftarrow> get_unslashed_participating_indices flag_index previous_epoch;
+    let weight = PARTICIPATION_FLAG_WEIGHTS ! flag_index;
+    unslashed_participating_balance \<leftarrow> get_total_balance unslashed_participating_indices;
+    unslashed_participating_increments \<leftarrow> lift_option (unslashed_participating_balance \\
+                                            EFFECTIVE_BALANCE_INCREMENT config);
+    total_active_balance \<leftarrow> get_total_active_balance ;
+    active_increments \<leftarrow> lift_option (total_active_balance \\ EFFECTIVE_BALANCE_INCREMENT config);
+    eligible_validator_indices \<leftarrow> get_eligible_validator_indices;
+    foldrM (\<lambda>index opt. do {
+      let (rewards, penalties) = opt;
+      base_reward \<leftarrow> get_base_reward index;
+      in_inactivity_leak \<leftarrow> is_in_inactivity_leak;
+      let index_nat = u64_to_nat index;
+      if index \<in> unslashed_participating_indices then (
+        if \<not> in_inactivity_leak then lift_option (do {
+          reward_numerator \<leftarrow> base_reward .* weight \<bind> flip (.*) unslashed_participating_increments;
+          reward_denominator \<leftarrow> active_increments .* WEIGHT_DENOMINATOR;
+          reward \<leftarrow> reward_numerator \\ reward_denominator;
+          total_reward \<leftarrow> rewards ! index_nat .+ reward;
+          let rewards' = list_update rewards index_nat total_reward;
+          Some (rewards', penalties)
+        }) else (return (rewards, penalties))
+
+      ) else if flag_index \<noteq> TIMELY_HEAD_FLAG_INDEX then lift_option (do {
+        penalty \<leftarrow> base_reward .* weight \<bind> (flip (\\) WEIGHT_DENOMINATOR);
+        total_penalty \<leftarrow> penalties ! index_nat .+ penalty;
+        let penalties' = list_update penalties index_nat total_penalty;
+        Some (rewards, penalties')
+      }) else (return (rewards, penalties))
+    })  eligible_validator_indices (init_rewards, init_penalties)
+  }"
+
+
+definition get_inactivity_penalty_deltas ::
+  "(u64 list \<times> u64 list, 'a) cont"
+where
+  "get_inactivity_penalty_deltas \<equiv> do {
+    v <- read validators;
+    let init_rewards = [(Unsigned.u64 0). _ \<leftarrow> [0..<length (list_inner v)]];
+    let init_penalties = init_rewards;
+    previous_epoch <- get_previous_epoch;
+    matching_target_indices \<leftarrow> get_unslashed_participating_indices TIMELY_TARGET_FLAG_INDEX
+                                                                   previous_epoch;
+    eligible_validator_indices \<leftarrow> get_eligible_validator_indices;
+    vs <- read validators;
+    scores <- read inactivity_scores; 
+    (final_rewards, final_penalties) <- foldrM (\<lambda>index opt. do {
+      let (rewards, penalties) = opt;
+      let index_nat = u64_to_nat index;
+      if index \<notin> matching_target_indices then lift_option (do {
+        validator \<leftarrow> list_index vs index;
+        inactivity_score \<leftarrow> list_index scores index;
+        penalty_numerator \<leftarrow> effective_balance_f validator .* inactivity_score;
+        penalty_denominator \<leftarrow> INACTIVITY_SCORE_BIAS config .* INACTIVITY_PENALTY_QUOTIENT_ALTAIR;
+        penalty \<leftarrow> penalty_numerator \\ penalty_denominator;
+        total_penalty \<leftarrow> (penalties ! index_nat) .+ penalty;
+        let penalties' = list_update penalties index_nat total_penalty;
+        Some (rewards, penalties')}) 
+      else
+        return (rewards, penalties)}) eligible_validator_indices (init_rewards, init_penalties);
+    return (final_rewards, final_penalties)
+  }"
+
+(* Existing code seems unfinished *)
+definition process_rewards_and_penalties ::
+  "(unit, 'a) cont"
+where
+  "process_rewards_and_penalties \<equiv> do {
+    current_epoch <- get_current_epoch;
+    if current_epoch = GENESIS_EPOCH then return ()
+    else do {
+
+    flag_deltas \<leftarrow> foldrM (\<lambda>flag_index all_deltas. do {
+      flag_index_deltas \<leftarrow> get_flag_index_deltas flag_index;
+      return (all_deltas @ [flag_index_deltas])
+    }) [0..<length PARTICIPATION_FLAG_WEIGHTS] [];
+
+    inactivity_penalty_deltas \<leftarrow> get_inactivity_penalty_deltas;
+    let deltas = flag_deltas @ [inactivity_penalty_deltas];
+    return ()
+    }}"
+
+
 
 
 

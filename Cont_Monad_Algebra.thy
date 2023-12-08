@@ -21,7 +21,7 @@ definition liftM :: "('a \<Rightarrow> 'b) \<Rightarrow> ('a, 'r) cont \<Rightar
 definition k_comp :: "('a \<Rightarrow> ('b, 'r) cont) =>  ('b \<Rightarrow> ('c, 'r) cont) => ('a \<Rightarrow> ('c, 'r) cont)" where 
  "k_comp f g \<equiv> \<lambda>a. bindCont (f a) g"
 
-definition foldrM  where
+definition foldrM :: "('a \<Rightarrow> 'b \<Rightarrow> ('b, 'r) cont) \<Rightarrow> 'a list \<Rightarrow> 'b \<Rightarrow> ('b, 'r) cont" where
   "foldrM f xs = foldr (k_comp) (map f xs) (return)"
 
 definition mapM  where
