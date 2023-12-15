@@ -486,6 +486,7 @@ definition is_in_inactivity_leak :: "(bool, 'a) cont" where
     return (finality_delay > MIN_EPOCHS_TO_INACTIVITY_PENALTY config)
   }"
 
+(* TODO: rewrite with map *)
 definition get_flag_index_deltas ::
   "nat \<Rightarrow> ((u64 list \<times> u64 list), 'a) cont"
 where
@@ -557,11 +558,55 @@ where
     return (final_rewards, final_penalties)
   }"
 
-(* Existing code seems unfinished *)
+definition list_update ::
+  "'b List \<Rightarrow> u64 \<Rightarrow> 'b \<Rightarrow> ('b List, 'a) cont"
+  where
+  "list_update xs i x \<equiv> do {
+    if u64_to_nat i < length (list_inner xs) then
+      return (List (List.list_update (list_inner xs) (u64_to_nat i) x))
+    else
+      fail
+  }"
+
+definition increase_balance ::
+  "u64 \<Rightarrow> u64 \<Rightarrow> (unit, 'a) cont"
+  where
+  "increase_balance index reward \<equiv> do {
+     orig_balances \<leftarrow> read balances;
+     orig_balance \<leftarrow> lift_option (list_index orig_balances index);
+     new_balance \<leftarrow> lift_option (orig_balance .+ reward);
+     new_balances \<leftarrow> list_update orig_balances index new_balance;
+     balances ::= new_balances
+  }"
+
+definition decrease_balance ::
+  "u64 \<Rightarrow> u64 \<Rightarrow> (unit, 'a) cont"
+  where
+  "decrease_balance index penalty \<equiv> do {
+     orig_balances \<leftarrow> read balances;
+     orig_balance \<leftarrow> lift_option (list_index orig_balances index);
+     let new_balance = Unsigned.u64 (u64_to_nat orig_balance - u64_to_nat penalty);
+     new_balances \<leftarrow> list_update orig_balances index new_balance;
+     balances ::= new_balances
+  }"
+
+definition apply_rewards_and_penalties 
+  where "apply_rewards_and_penalties rp v = do {
+      let (rewards, penalties) = rp;
+      mapM (\<lambda>index. do {
+        reward \<leftarrow> lift_option (Some (rewards ! u64_to_nat index));
+        penalty \<leftarrow> lift_option (Some (penalties ! u64_to_nat index));
+        increase_balance index reward;
+        decrease_balance index penalty
+      }) (map Unsigned.u64 [0..<length (list_inner v)]);
+      return ()
+  }"
+
 definition process_rewards_and_penalties ::
   "(unit, 'a) cont"
 where
   "process_rewards_and_penalties \<equiv> do {
+    v <- read validators;
     current_epoch <- get_current_epoch;
     if current_epoch = GENESIS_EPOCH then return ()
     else do {
@@ -572,12 +617,8 @@ where
     }) [0..<length PARTICIPATION_FLAG_WEIGHTS] [];
 
     inactivity_penalty_deltas \<leftarrow> get_inactivity_penalty_deltas;
-    let deltas = flag_deltas @ [inactivity_penalty_deltas];
+    mapM (\<lambda>rp. apply_rewards_and_penalties rp v) (flag_deltas @ [inactivity_penalty_deltas]);
     return ()
     }}"
-
-
-
-
 
 end

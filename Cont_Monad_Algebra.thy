@@ -24,8 +24,12 @@ definition k_comp :: "('a \<Rightarrow> ('b, 'r) cont) =>  ('b \<Rightarrow> ('c
 definition foldrM :: "('a \<Rightarrow> 'b \<Rightarrow> ('b, 'r) cont) \<Rightarrow> 'a list \<Rightarrow> 'b \<Rightarrow> ('b, 'r) cont" where
   "foldrM f xs = foldr (k_comp) (map f xs) (return)"
 
-definition mapM  where
-  "mapM f xs = foldrM (\<lambda>a xs. liftM (\<lambda>x. x # xs) f a) xs []" 
+definition mapM :: "('a \<Rightarrow> ('b, 'r) cont) \<Rightarrow> 'a list \<Rightarrow> ('b list, 'r) cont" where
+  "mapM f xs = undefined"
+(*
+ * FIXME
+ *"mapM f xs = foldrM (\<lambda>a xs. liftM (\<lambda>x. x # xs) f a) xs []"
+ *)
 
 adhoc_overloading bind bindCont
 
