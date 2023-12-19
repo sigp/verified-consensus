@@ -251,6 +251,9 @@ definition add :: "64 word \<Rightarrow> 64 word \<Rightarrow> (64 word, 'a) con
      if x < result then return result else fail
    }"
 
+abbreviation 
+  "when b p \<equiv> (if b then p else return ())" 
+
 lemma add_sanity: "x < 2^64 - 2 \<Longrightarrow> run (add x 1) \<noteq> \<top>"
   apply (clarsimp simp: add_def run_def Let_unfold return_def plus_1_less fail_def)
   by (metis less_x_plus_1 word_order.extremum_strict)
@@ -351,18 +354,18 @@ where
      previous_epoch_target_x3 \<leftarrow>  lift_option  (previous_epoch_target_balance .* (Unsigned.u64 3));
      current_epoch_target_x3  \<leftarrow>  lift_option  (current_epoch_target_balance .* (Unsigned.u64 3));
      total_active_balance_x2  \<leftarrow>  lift_option  (total_active_balance .* (Unsigned.u64 2));
-     (if previous_epoch_target_x3 \<ge> total_active_balance_x2 then do {
-           bits <- read justification_bits;
+     when (previous_epoch_target_x3 \<ge> total_active_balance_x2)
+      (do {bits <- read justification_bits;
            let updated_justification_bits = bitvector_update bits 1 False;
            block_root <- get_block_root previous_epoch;
            _  <- (current_justified_checkpoint ::= current_justified_checkpoint\<lparr>epoch_f := previous_epoch, root_f := block_root\<rparr>);
-          (justification_bits ::= updated_justification_bits)} else return ());
-     (if current_epoch_target_x3 \<ge> total_active_balance_x2 then do {
-           bits <- read justification_bits;
+          (justification_bits ::= updated_justification_bits)});
+     when (current_epoch_target_x3 \<ge> total_active_balance_x2) 
+      (do {bits <- read justification_bits;
            let updated_justification_bits = bitvector_update bits 0 False;
            block_root <- get_block_root previous_epoch;
            _ <- (current_justified_checkpoint ::= current_justified_checkpoint\<lparr>epoch_f := current_epoch, root_f := block_root\<rparr>);
-          (justification_bits ::= updated_justification_bits)} else return ());
+          (justification_bits ::= updated_justification_bits)});
      bits <- read justification_bits;
      x <- lift_option (epoch_f old_previous_justified_checkpoint .+ Epoch (Unsigned.u64 3));
      _ <- (if (bitvector_all bits 1 4 \<and> x = current_epoch) then 
@@ -376,7 +379,6 @@ where
         (finalized_checkpoint ::= old_previous_justified_checkpoint) else return ())  
      }"
 
-term list_inner
 
 definition get_active_validator_indices :: "Epoch \<Rightarrow> (u64 list, 'a) cont" where
   "get_active_validator_indices  e \<equiv> do {
@@ -620,5 +622,10 @@ where
     mapM (\<lambda>rp. apply_rewards_and_penalties rp v) (flag_deltas @ [inactivity_penalty_deltas]);
     return ()
     }}"
+
+
+
+
+end
 
 end

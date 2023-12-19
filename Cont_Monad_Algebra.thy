@@ -97,6 +97,10 @@ definition while' :: "(bool, 'a) cont \<Rightarrow> ('b, 'a) cont \<Rightarrow> 
   where "while' b m = (\<lambda>f. iter (run m); bindCont b (\<lambda>c g. if c then f () else \<bottom>) f)"
 
 
+
+lemma kcomp_assoc: "k_comp (k_comp f g) h = k_comp f (k_comp g h)"
+  by (intro ext; clarsimp simp: k_comp_def bindCont_def return_def)
+
 definition "assertion P = do {a <- getState; (if (P a) then return () else fail)}"
 
 definition "test_state P = do {a <- getState; return (P a)}"
