@@ -8,7 +8,7 @@ type_synonym ('var, 'val) heap = "'var \<Rightarrow> 'val option"
 
 datatype ('a, 'b) lens = Lens (get : "'a \<Rightarrow> 'b") (set: "'a \<Rightarrow> 'b \<Rightarrow> 'a")
 
-datatype heap_value = list "heap_value list" | u8 word8 | u64 "64 word" 
+datatype heap_value = list "heap_value list" | u8 u8 | u64 u64 
 
 primrec is_list where
   "is_list (list _) = True"|
@@ -54,6 +54,12 @@ consts
 abbreviation modify :: "'a \<Rightarrow> ('b \<Rightarrow> 'b) \<Rightarrow> (unit, 'c) cont" where
    "modify a f \<equiv> (bindCont (read a) (\<lambda>x. write_to a (f x)))"
 
+consts
+  unsigned_add :: "'w \<Rightarrow> 'w \<Rightarrow> ('w, 'a) cont"
+  unsigned_sub :: "'w \<Rightarrow> 'w \<Rightarrow> ('w, 'a) cont"
+  unsigned_mul :: "'w \<Rightarrow> 'w \<Rightarrow> ('w, 'a) cont"
+  unsigned_div :: "'w \<Rightarrow> 'w \<Rightarrow> ('w, 'a) cont"
+  unsigned_mod :: "'w \<Rightarrow> 'w \<Rightarrow> ('w, 'a) cont"
 
 definition "genesis_time = Lens genesis_time_f (\<lambda>a b. a\<lparr>genesis_time_f := b\<rparr> )"
 
@@ -242,58 +248,99 @@ adhoc_overloading
 adhoc_overloading
   write_to write_beacon write_list write_u8 write_u64
 
-term "(read (x :: 'var)) :: (64 word, 'a) cont"
-
-(* word-based arithmetic *)
-definition add :: "64 word \<Rightarrow> 64 word \<Rightarrow> (64 word, 'a) cont" where
-  "add x y \<equiv> do {
+(* word-based arithmetic with overflow checks *)
+definition word_unsigned_add :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
+  "word_unsigned_add x y \<equiv> do {
      let result = x + y;
      if x < result then return result else fail
    }"
 
-lemma add_sanity: "x < 2^64 - 2 \<Longrightarrow> run (add x 1) \<noteq> \<top>"
-  apply (clarsimp simp: add_def run_def Let_unfold return_def plus_1_less fail_def)
+definition slot_unsigned_add :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a) cont" where
+  "slot_unsigned_add x y \<equiv> do {
+    result \<leftarrow> word_unsigned_add (slot_to_u64 x) (slot_to_u64 y);
+    return (Slot result)
+  }"
+
+adhoc_overloading
+  unsigned_add word_unsigned_add slot_unsigned_add
+
+notation
+  unsigned_add (infixl ".+" 65) and
+  unsigned_sub (infixl ".-" 65) and
+  unsigned_mul (infixl ".*" 70) and
+  unsigned_div (infixl "\\" 70) and
+  unsigned_mod (infixl ".%" 75)
+
+lemma add_sanity: "x < 2^64 - 2 \<Longrightarrow> run (x .+ 1) \<noteq> \<top>"
+  apply (clarsimp simp: word_unsigned_add_def run_def Let_unfold return_def plus_1_less fail_def)
   by (metis less_x_plus_1 word_order.extremum_strict)
 
-definition mul :: "64 word \<Rightarrow> 64 word \<Rightarrow> (64 word, 'a) cont" where
-  "mul x y \<equiv>
+definition word_unsigned_mul :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
+  "word_unsigned_mul x y \<equiv>
      let result = x * y in
      if result div x = y then return result else fail"
 
-lemma mul_sanity: "x = 2 ^ 63 - 1 \<Longrightarrow> y = 2 \<Longrightarrow> run (mul x y) \<noteq> \<top>"
-  by (clarsimp simp: mul_def run_def Let_unfold return_def)
+definition slot_unsigned_mul :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a) cont" where
+  "slot_unsigned_mul x y \<equiv> do {
+    result \<leftarrow> word_unsigned_mul (slot_to_u64 x) (slot_to_u64 y);
+    return (Slot result)
+  }"
 
-lemma mul_sanity_overflow: "x = 2 ^ 63 \<Longrightarrow> y = 2 \<Longrightarrow> run (mul x y) = \<top>"
-  by (clarsimp simp: mul_def run_def Let_unfold return_def fail_def)
+adhoc_overloading
+  unsigned_mul word_unsigned_mul slot_unsigned_mul
 
-definition udiv :: "64 word \<Rightarrow> 64 word \<Rightarrow> (64 word, 'a) cont" where
-  "udiv x y \<equiv>
+lemma mul_sanity: "(x :: u64) = 2 ^ 63 - 1 \<Longrightarrow> y = 2 \<Longrightarrow> run (x .* y) \<noteq> \<top>"
+  by (clarsimp simp: word_unsigned_mul_def run_def Let_unfold return_def)
+
+lemma mul_sanity_overflow: "(x :: u64) = 2 ^ 63 \<Longrightarrow> y = 2 \<Longrightarrow> run (x .* y) = \<top>"
+  by (clarsimp simp: word_unsigned_mul_def run_def Let_unfold return_def fail_def)
+
+definition word_unsigned_div :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
+  "word_unsigned_div x y \<equiv>
      if y \<noteq> 0 then return (x div y) else fail"
 
-lemma udiv_sanity: "run (udiv x 2) \<noteq> \<top>"
-  by (clarsimp simp: udiv_def run_def Let_unfold return_def)
+definition slot_unsigned_div :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a) cont" where
+  "slot_unsigned_div x y \<equiv> do {
+    result \<leftarrow> word_unsigned_div (slot_to_u64 x) (slot_to_u64 y);
+    return (Slot result)
+  }"
 
-lemma udiv_sanity_overflow: "run (udiv x 0) = \<top>"
-  by (clarsimp simp: udiv_def run_def Let_unfold fail_def)
+adhoc_overloading
+  unsigned_div word_unsigned_div slot_unsigned_div
 
-definition sub :: "64 word \<Rightarrow> 64 word \<Rightarrow> (64 word, 'a) cont" where
-  "sub x y \<equiv>
+lemma udiv_sanity: "run ((x :: u64) \\ 2) \<noteq> \<top>"
+  by (clarsimp simp: word_unsigned_div_def run_def Let_unfold return_def)
+
+lemma udiv_sanity_overflow: "run (x \\ 0) = \<top>"
+  by (clarsimp simp: word_unsigned_div_def run_def Let_unfold fail_def)
+
+definition word_unsigned_sub :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
+  "word_unsigned_sub x y \<equiv>
      let result = x - y in
      if result \<le> x then return result else fail"
 
-lemma sub_sanity: "x > 1 \<Longrightarrow> run (sub x 1) \<noteq> \<top>"
-  apply (clarsimp simp: sub_def run_def Let_unfold return_def fail_def)
+definition slot_unsigned_sub :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a) cont" where
+  "slot_unsigned_sub x y \<equiv> do {
+    result \<leftarrow> word_unsigned_sub (slot_to_u64 x) (slot_to_u64 y);
+    return (Slot result)
+  }"
+
+adhoc_overloading
+  unsigned_sub word_unsigned_sub slot_unsigned_sub
+
+lemma sub_sanity: "(x :: u64) > 1 \<Longrightarrow> run (x .- 1) \<noteq> \<top>"
+  apply (clarsimp simp: word_unsigned_sub_def run_def Let_unfold return_def fail_def)
   by (metis word_not_simps(1) word_sub_1_le)
 
 lemma u64_max: "2^64 - 1 = (-1 :: 64 word)"
   by (metis eq_2_64_0 minus_one_word word_exp_length_eq_0)
 
-lemma sub_sanity_max: "run (sub (2^64 - 1) x) \<noteq> \<top>"
+lemma sub_sanity_max: "run ((2^64 - 1) .- (x :: u64)) \<noteq> \<top>"
   apply (subst u64_max)
-  by (fastforce simp: sub_def run_def Let_unfold return_def fail_def)
+  by (fastforce simp: word_unsigned_sub_def run_def Let_unfold return_def fail_def)
 
-lemma sub_sanity_overflow: "y \<noteq> 0 \<Longrightarrow> run (sub 0 y) = \<top>"
-  by (fastforce simp: sub_def run_def Let_unfold return_def fail_def)
+lemma sub_sanity_overflow: "y \<noteq> 0 \<Longrightarrow> run (0 .- y) = \<top>"
+  by (fastforce simp: word_unsigned_sub_def run_def Let_unfold return_def fail_def)
 
 (* TODO *)
 definition get_eligible_validator_indices' :: "(u64 list, 'a) cont" where
