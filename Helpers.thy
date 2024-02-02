@@ -3,11 +3,11 @@ theory Helpers
 begin
 
 definition compute_start_slot_at_epoch :: "Config \<Rightarrow> Epoch \<Rightarrow> Slot" where
-  "compute_start_slot_at_epoch c e \<equiv> Slot (the (epoch_to_u64 e .* SLOTS_PER_EPOCH c))"
+  "compute_start_slot_at_epoch c e \<equiv> Slot (epoch_to_u64 e * SLOTS_PER_EPOCH c)"
 
 definition get_current_epoch :: "Config \<Rightarrow> BeaconState \<Rightarrow> Epoch" where
   "get_current_epoch c state \<equiv>
-    Epoch (the ((slot_to_u64 (slot_f state) \\ SLOTS_PER_EPOCH c)))"
+    Epoch (slot_to_u64 (slot_f state) div SLOTS_PER_EPOCH c)"
 
 definition get_previous_epoch :: "Config \<Rightarrow> BeaconState \<Rightarrow> Epoch" where
   "get_previous_epoch c state \<equiv>

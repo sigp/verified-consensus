@@ -2,29 +2,34 @@ theory Utils
   imports Unsigned Types Invariants
 begin
 
+context verified_con
+begin
+
+(* FIXME(sproul): delete
 primrec assert :: "bool \<Rightarrow> unit option" where
   "assert True = Some ()" |
   "assert False = None"
+*)
 
-definition enumerate :: "'a list \<Rightarrow> (u64 \<times> 'a) list" where
-  "enumerate l \<equiv> zip (map u64 [0..<length l]) l"
+definition enumerate :: "'b list \<Rightarrow> (u64 \<times> 'b) list" where
+  "enumerate l \<equiv> zip (map nat_to_u64 [0..<length l]) l"
 
-definition safe_sum :: "u64 set \<Rightarrow> u64 option" where
-  "safe_sum s \<equiv> foldl (\<lambda>acc x. acc \<bind> ((.+) x)) (Some (u64 0)) (sorted_list_of_set s)"
+definition safe_sum :: "u64 set \<Rightarrow> (u64, 'a) cont" where
+  "safe_sum s \<equiv> foldrM (.+) (sorted_list_of_set s) 0"
 
-definition list_index :: "'a List \<Rightarrow> u64 \<Rightarrow> 'a option" where
-  "list_index l i \<equiv>
-    if i < u64 (length (list_inner l)) then
-      Some (list_inner l ! u64_to_nat i)
+definition var_list_index :: "'a VariableList \<Rightarrow> u64 \<Rightarrow> 'a option" where
+  "var_list_index l i \<equiv>
+    if i < var_list_len l then
+      Some (var_list_inner l ! u64_to_nat i)
     else
       None"
 
-definition unsafe_list_index :: "'a List \<Rightarrow> u64 \<Rightarrow> 'a" where
-  "unsafe_list_index l i \<equiv> the (list_index l i)"
+definition unsafe_var_list_index :: "'a VariableList \<Rightarrow> u64 \<Rightarrow> 'a" where
+  "unsafe_var_list_index l i \<equiv> the (var_list_index l i)"
 
 definition vector_index :: "'a Vector \<Rightarrow> u64 \<Rightarrow> 'a option" where
   "vector_index v i \<equiv>
-    if i < u64 (length (vector_inner v)) then
+    if i < vector_len v then
       Some (vector_inner v ! u64_to_nat i)
     else
       None"
@@ -43,26 +48,26 @@ definition bitvector_all :: "Bitvector \<Rightarrow> nat \<Rightarrow> nat \<Rig
   "bitvector_all bv start end \<equiv>
     list_all (\<lambda>x. x) (take (end - start) (drop start (bitvector_inner bv)))"
 
-definition flip :: "('a \<Rightarrow> 'b \<Rightarrow> 'c) \<Rightarrow> 'b \<Rightarrow> 'a \<Rightarrow> 'c" where
-  "flip f x y \<equiv> f y x"
-
-function integer_squareroot_aux :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 \<Rightarrow> (u64 \<times> u64) option" where
+function integer_squareroot_aux :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 \<Rightarrow> ((u64 \<times> u64), 'a) cont" where
   "integer_squareroot_aux x y n =
     (if y < x then
-      Some (x, y)
+      return (x, y)
     else do {
       let x' = y;
-      y' \<leftarrow> (x' .+ n);
+      y' \<leftarrow> x' .+ n;
       integer_squareroot_aux x' y' n
   })"
   by auto
 
-definition integer_squareroot :: "u64 \<Rightarrow> u64 option" where
+(* https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/beacon-chain.md#integer_squareroot *)
+definition integer_squareroot :: "u64 \<Rightarrow> (u64, 'a) cont" where
   "integer_squareroot n \<equiv> do {
     let x = n;
-    y \<leftarrow> (x .+ u64 1) \<bind> (flip (\\) (u64 2));
+    x_plus_1 \<leftarrow> x .+ 1;
+    y \<leftarrow> x_plus_1 \\ 2;
     (x', _) \<leftarrow> integer_squareroot_aux x y n;
-    Some x'
+    return x'
   }"
 
+end
 end
