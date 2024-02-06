@@ -595,11 +595,11 @@ definition decrease_balance ::
 definition apply_rewards_and_penalties 
   where "apply_rewards_and_penalties rp v = do {
       let (rewards, penalties) = rp;
-      mapM (\<lambda>index. do {
-        reward \<leftarrow> lift_option (Some (rewards ! u64_to_nat index));
-        penalty \<leftarrow> lift_option (Some (penalties ! u64_to_nat index));
-        increase_balance index reward;
-        decrease_balance index penalty
+      _ <- mapM (\<lambda>index. do {
+           reward  \<leftarrow> lift_option (Some (rewards ! u64_to_nat index));
+           penalty \<leftarrow> lift_option (Some (penalties ! u64_to_nat index));
+           increase_balance index reward;
+           decrease_balance index penalty
       }) (map Unsigned.u64 [0..<length (list_inner v)]);
       return ()
   }"
@@ -619,7 +619,7 @@ where
     }) [0..<length PARTICIPATION_FLAG_WEIGHTS] [];
 
     inactivity_penalty_deltas \<leftarrow> get_inactivity_penalty_deltas;
-    mapM (\<lambda>rp. apply_rewards_and_penalties rp v) (flag_deltas @ [inactivity_penalty_deltas]);
+    _ <- mapM (\<lambda>rp. apply_rewards_and_penalties rp v) (flag_deltas @ [inactivity_penalty_deltas]);
     return ()
     }}"
 
