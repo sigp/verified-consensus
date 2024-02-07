@@ -1,6 +1,6 @@
 theory Hoare_Logic
   imports Translation_Test "algebra/rg-algebra/AbstractAtomicTest/Programming_Constructs" 
-  "../jormungand/sep_algebra/Sep_Tactics"
+  "jormungand/sep_algebra/Sep_Tactics"
 begin
 
 declare [[show_sorts=false]]
@@ -707,8 +707,10 @@ lemma return_triple: "hoare_triple P (bindCont C return) Q \<Longrightarrow> hoa
 method wp = ((simp only: bindCont_assoc[symmetric] bindCont_return')?,
        (rule wp return_wp wp[THEN return_triple]) | assumption )+ 
 
+
 lemma add_fields_wp: "(\<And>a. hoare_triple ( (P a)) (c a) (Q))  \<Longrightarrow>
-    hoare_triple ( (maps_to l v \<and>* maps_to l' v' \<and>* (maps_to l v \<and>* maps_to l' v' \<longrightarrow>* P (v + v')))) (do {x <- add_fields l l'; c x}) (Q )"
+    hoare_triple ( (maps_to l v \<and>* maps_to l' v' \<and>* (maps_to l v \<and>* maps_to l' v' \<longrightarrow>* P (v + v'))))
+         (do {x <- add_fields l l'; c x}) (Q )"
   apply (clarsimp simp: add_fields_def)
   apply (rule hoare_weaken_pre)
     apply (wp)
