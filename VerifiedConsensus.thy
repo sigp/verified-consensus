@@ -53,6 +53,9 @@ consts
 abbreviation modify :: "'a \<Rightarrow> ('b \<Rightarrow> 'b) \<Rightarrow> (unit, 'c) cont" where
    "modify a f \<equiv> (bindCont (read a) (\<lambda>x. write_to a (f x)))"
 
+abbreviation 
+  "when b p \<equiv> (if b then p else return ())" 
+
 definition "genesis_time = Lens genesis_time_f (\<lambda>a b. a\<lparr>genesis_time_f := b\<rparr> )"
 
 definition "genesis_validators_root = Lens genesis_validators_root_f  (\<lambda>a b. a\<lparr>genesis_validators_root_f := b\<rparr> )"

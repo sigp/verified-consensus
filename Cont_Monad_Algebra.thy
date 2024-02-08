@@ -24,14 +24,17 @@ definition k_comp :: "('a \<Rightarrow> ('b, 'r) cont) =>  ('b \<Rightarrow> ('c
 definition foldrM :: "('a \<Rightarrow> 'b \<Rightarrow> ('b, 'r) cont) \<Rightarrow> 'a list \<Rightarrow> 'b \<Rightarrow> ('b, 'r) cont" where
   "foldrM f xs = foldr (k_comp) (map f xs) (return)"
 
-definition mapM :: "('a \<Rightarrow> ('b, 'r) cont) \<Rightarrow> 'a list \<Rightarrow> ('b list, 'r) cont" where
-  "mapM f xs = undefined"
 (*
  * FIXME
  *"mapM f xs = foldrM (\<lambda>a xs. liftM (\<lambda>x. x # xs) f a) xs []"
  *)
 
 adhoc_overloading bind bindCont
+
+
+primrec mapM :: "('a \<Rightarrow> ('b, 'r) cont) \<Rightarrow> 'a list \<Rightarrow> ('b list, 'r) cont" where
+  "mapM f (x#xs) = do {a <- f x ; b <- mapM f xs; return (a # b)} " |
+  "mapM f [] = return []"
 
 
 definition ifM :: "(bool, 'a) cont \<Rightarrow> ('b, 'a) cont \<Rightarrow> ('b, 'a) cont \<Rightarrow> ('b, 'a) cont"
@@ -92,6 +95,10 @@ definition "check f x = f (\<lambda>P. if P then x else nil)"
 definition while' :: "(bool, 'a) cont \<Rightarrow> ('b, 'a) cont \<Rightarrow> (unit, 'a) cont"
   where "while' b m = (\<lambda>f. iter (run m); bindCont b (\<lambda>c g. if c then f () else \<bottom>) f)"
 
+
+
+lemma kcomp_assoc: "k_comp (k_comp f g) h = k_comp f (k_comp g h)"
+  by (intro ext; clarsimp simp: k_comp_def bindCont_def return_def)
 
 definition "assertion P = do {a <- getState; (if (P a) then return () else fail)}"
 

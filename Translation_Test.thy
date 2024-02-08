@@ -86,18 +86,18 @@ where
      previous_epoch_target_x3 \<leftarrow> previous_epoch_target_balance .* 3;
      current_epoch_target_x3  \<leftarrow> current_epoch_target_balance .* 3;
      total_active_balance_x2  \<leftarrow> total_active_balance .* 2;
-     (if previous_epoch_target_x3 \<ge> total_active_balance_x2 then do {
-           bits <- read justification_bits;
+     when (previous_epoch_target_x3 \<ge> total_active_balance_x2)
+      (do {bits <- read justification_bits;
            let updated_justification_bits = bitvector_update bits 1 False;
            block_root <- get_block_root previous_epoch;
            _  <- (current_justified_checkpoint ::= current_justified_checkpoint\<lparr>epoch_f := previous_epoch, root_f := block_root\<rparr>);
-          (justification_bits ::= updated_justification_bits)} else return ());
-     (if current_epoch_target_x3 \<ge> total_active_balance_x2 then do {
-           bits <- read justification_bits;
+          (justification_bits ::= updated_justification_bits)});
+     when (current_epoch_target_x3 \<ge> total_active_balance_x2) 
+      (do {bits <- read justification_bits;
            let updated_justification_bits = bitvector_update bits 0 False;
            block_root <- get_block_root previous_epoch;
            _ <- (current_justified_checkpoint ::= current_justified_checkpoint\<lparr>epoch_f := current_epoch, root_f := block_root\<rparr>);
-          (justification_bits ::= updated_justification_bits)} else return ());
+          (justification_bits ::= updated_justification_bits)});
      bits <- read justification_bits;
      x <- epoch_f old_previous_justified_checkpoint .+ Epoch 3;
      _ <- (if (bitvector_all bits 1 4 \<and> x = current_epoch) then 
@@ -175,7 +175,6 @@ where
       } else (return (rewards, penalties))
     })  eligible_validator_indices (init_rewards, init_penalties)
   }"
-
 
 definition get_inactivity_penalty_deltas ::
   "(u64 list \<times> u64 list, 'a) cont"
@@ -270,5 +269,7 @@ where
     _ \<leftarrow> mapM (\<lambda>rp. apply_rewards_and_penalties rp v) (flag_deltas @ [inactivity_penalty_deltas]);
     return ()
     }}"
+
+end
 
 end
