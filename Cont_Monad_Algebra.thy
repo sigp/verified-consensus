@@ -89,10 +89,6 @@ definition "run f = (f (\<lambda>_. nil))"
 
 definition "check f x = f (\<lambda>P. if P then x else nil)"
 
-
-definition while :: "('b \<Rightarrow> (bool, 'a) cont) \<Rightarrow> ('b, 'a) cont \<Rightarrow> 'b \<Rightarrow>  (unit, 'a) cont"
-  where "while b m a f = check (b a) (gfp (\<lambda>x. check (m \<bind> b) x)) ; f ()"
-
 definition while' :: "(bool, 'a) cont \<Rightarrow> ('b, 'a) cont \<Rightarrow> (unit, 'a) cont"
   where "while' b m = (\<lambda>f. iter (run m); bindCont b (\<lambda>c g. if c then f () else \<bottom>) f)"
 

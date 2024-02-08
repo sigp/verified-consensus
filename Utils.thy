@@ -5,36 +5,33 @@ begin
 context verified_con
 begin
 
-(* FIXME(sproul): delete
-primrec assert :: "bool \<Rightarrow> unit option" where
-  "assert True = Some ()" |
-  "assert False = None"
-*)
-
 definition enumerate :: "'b list \<Rightarrow> (u64 \<times> 'b) list" where
   "enumerate l \<equiv> zip (map nat_to_u64 [0..<length l]) l"
 
 definition safe_sum :: "u64 set \<Rightarrow> (u64, 'a) cont" where
   "safe_sum s \<equiv> foldrM (.+) (sorted_list_of_set s) 0"
 
-definition var_list_index :: "'a VariableList \<Rightarrow> u64 \<Rightarrow> 'a option" where
+definition var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> 'b option" where
   "var_list_index l i \<equiv>
     if i < var_list_len l then
       Some (var_list_inner l ! u64_to_nat i)
     else
       None"
 
-definition unsafe_var_list_index :: "'a VariableList \<Rightarrow> u64 \<Rightarrow> 'a" where
+definition var_list_inner :: "'b VariableList \<Rightarrow> 'b list" where
+  "var_list_inner l \<equiv> case l of VariableList inner \<Rightarrow> inner"
+
+definition unsafe_var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> 'b" where
   "unsafe_var_list_index l i \<equiv> the (var_list_index l i)"
 
-definition vector_index :: "'a Vector \<Rightarrow> u64 \<Rightarrow> 'a option" where
+definition vector_index :: "'b Vector \<Rightarrow> u64 \<Rightarrow> 'b option" where
   "vector_index v i \<equiv>
     if i < vector_len v then
       Some (vector_inner v ! u64_to_nat i)
     else
       None"
 
-definition unsafe_vector_index :: "'a Vector \<Rightarrow> u64 \<Rightarrow> 'a" where
+definition unsafe_vector_index :: "'b Vector \<Rightarrow> u64 \<Rightarrow> 'b" where
   "unsafe_vector_index v i \<equiv> the (vector_index v i)"
 
 definition shift_and_clear_bitvector :: "Config \<Rightarrow> Bitvector \<Rightarrow> Bitvector" where

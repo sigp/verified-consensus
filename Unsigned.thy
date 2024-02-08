@@ -81,8 +81,14 @@ definition slot_unsigned_add :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a
     return (Slot result)
   }"
 
+definition epoch_unsigned_add :: "Epoch \<Rightarrow> Epoch \<Rightarrow> (Epoch, 'a) cont" where
+  "epoch_unsigned_add x y \<equiv> do {
+    result \<leftarrow> word_unsigned_add (epoch_to_u64 x) (epoch_to_u64 y);
+    return (Epoch result)
+  }"
+
 adhoc_overloading
-  unsigned_add word_unsigned_add slot_unsigned_add
+  unsigned_add word_unsigned_add slot_unsigned_add epoch_unsigned_add
 
 notation
   unsigned_add (infixl ".+" 65) and
@@ -145,8 +151,15 @@ definition slot_unsigned_sub :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a
     return (Slot result)
   }"
 
+definition epoch_unsigned_sub :: "Epoch \<Rightarrow> Epoch \<Rightarrow> (Epoch, 'a) cont" where
+  "epoch_unsigned_sub x y \<equiv> do {
+    result \<leftarrow> word_unsigned_sub (epoch_to_u64 x) (epoch_to_u64 y);
+    return (Epoch result)
+  }"
+
+(* TODO(michael) : more epoch ops *)
 adhoc_overloading
-  unsigned_sub word_unsigned_sub slot_unsigned_sub
+  unsigned_sub word_unsigned_sub slot_unsigned_sub epoch_unsigned_sub
 
 lemma sub_sanity: "(x :: u64) > 1 \<Longrightarrow> run (x .- 1) \<noteq> \<top>"
   apply (clarsimp simp: word_unsigned_sub_def run_def Let_unfold return_def fail_def)
