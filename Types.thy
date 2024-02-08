@@ -1,5 +1,5 @@
 theory Types
-  imports Main Unsigned
+  imports Main "Word_Lib.Word_64" "Word_Lib.Word_8"
 begin
 
 (*
@@ -7,9 +7,14 @@ begin
  * unusable. See: https://isabelle.in.tum.de/dist/library/Doc/Tutorial/Records.html
 *)
 
+type_synonym u8 = "8 word"
+type_synonym u64 = "64 word"
+datatype Slot = Slot u64
+datatype Epoch = Epoch u64
+
 datatype Hash256 = Hash256 "u8 list"
 datatype 'a Vector = Vector "'a list"
-datatype 'a List = List "'a list"
+datatype 'a VariableList = VariableList "'a list"
 
 datatype Bitvector = Bitvector "bool list"
 
@@ -62,21 +67,21 @@ record BeaconState =
   latest_block_header_f :: "BeaconBlockHeader option"
   block_roots_f :: "Hash256 Vector option"
   state_roots_f :: "Hash256 Vector option"
-  historical_roots_f :: "Hash256 List option"
+  historical_roots_f :: "Hash256 VariableList option"
   eth1_data_f :: "Eth1Data option"
-  eth1_data_votes_f :: "Eth1Data List option"
+  eth1_data_votes_f :: "Eth1Data VariableList option"
   eth1_deposit_index_f :: "u64 option"
-  validators_f :: "Validator List option"
-  balances_f :: "u64 List option"
+  validators_f :: "Validator VariableList option"
+  balances_f :: "u64 VariableList option"
   randao_mixes_f :: "Hash256 Vector option"
   slashings_f :: "u64 Vector option"
-  previous_epoch_participation_f :: "ParticipationFlags List option"
-  current_epoch_participation_f :: "ParticipationFlags List option"
+  previous_epoch_participation_f :: "ParticipationFlags VariableList option"
+  current_epoch_participation_f :: "ParticipationFlags VariableList option"
   justification_bits_f :: "Bitvector option"
   previous_justified_checkpoint_f :: "Checkpoint option"
   current_justified_checkpoint_f :: "Checkpoint option"
   finalized_checkpoint_f :: "Checkpoint option"
-  inactivity_scores_f :: "u64 List option"
+  inactivity_scores_f :: "u64 VariableList option"
   current_sync_committee_f :: "SyncCommittee option"
   next_sync_committee_f :: "SyncCommittee option"
 

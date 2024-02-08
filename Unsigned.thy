@@ -1,14 +1,12 @@
 theory Unsigned
-  imports Main HOL.Nat "HOL-Library.Monad_Syntax"
+  imports Main HOL.Nat Cont_Monad_Algebra VerifiedConsensus
 begin
 
-datatype u8 = u8 nat
-datatype u64 = u64 nat
-datatype Slot = Slot u64
-datatype Epoch = Epoch u64
+abbreviation nat_to_u64 :: "nat \<Rightarrow> u64" where
+  "nat_to_u64 \<equiv> Word.of_nat"
 
-primrec u64_to_nat :: "u64 \<Rightarrow> nat" where
-  "u64_to_nat (u64 n) = n"
+abbreviation u64_to_nat :: "u64 \<Rightarrow> nat" where
+  "u64_to_nat \<equiv> Word.the_nat"
 
 primrec slot_to_u64 :: "Slot \<Rightarrow> u64" where
   "slot_to_u64 (Slot n) = n"
@@ -16,37 +14,19 @@ primrec slot_to_u64 :: "Slot \<Rightarrow> u64" where
 primrec epoch_to_u64 :: "Epoch \<Rightarrow> u64" where
   "epoch_to_u64 (Epoch n) = n"
 
-definition valid_u64 :: "u64 \<Rightarrow> bool" where
-  "valid_u64 n \<equiv> u64_to_nat n < 2 ^ 64"
-
-definition valid_slot :: "Slot \<Rightarrow> bool" where
-  "valid_slot s \<equiv> valid_u64 (slot_to_u64 s)"
-
-definition valid_epoch :: "Epoch \<Rightarrow> bool" where
-  "valid_epoch e \<equiv> valid_u64 (epoch_to_u64 e)"
+lemma u64_upper_bound: "u64_to_nat x < 2 ^ 64"
+  apply (rule Orderings.xtrans(1)[where b="2 ^ LENGTH(64)"])
+   apply force
+  by (metis nat_less_numeral_power_cancel_iff take_bit_int_less_exp the_nat.rep_eq)
 
 lemma u64_to_nat_bij: "(u64_to_nat x = u64_to_nat y) = (x = y)"
-  by (case_tac x; case_tac y; auto)
+  by auto
 
 lemma slot_to_u64_bij: "(slot_to_u64 x = slot_to_u64 y) = (x = y)"
   by (case_tac x; case_tac y; auto)
 
 lemma epoch_to_u64_bij: "(epoch_to_u64 x = epoch_to_u64 y) = (x = y)"
   by (case_tac x; case_tac y; auto)
-
-(* Linear order instance for u64 *)
-instantiation u64 :: linorder
-begin
-
-definition less_eq_u64 :: "u64 \<Rightarrow> u64 \<Rightarrow> bool" where
-  "less_eq_u64 x y \<equiv> u64_to_nat x \<le> u64_to_nat y"
-
-definition less_u64 :: "u64 \<Rightarrow> u64 \<Rightarrow> bool" where
-  "less_u64 x y \<equiv> u64_to_nat x < u64_to_nat y"
-
-instance
-  by (intro_classes; auto simp: less_eq_u64_def less_u64_def u64_to_nat_bij)
-end
 
 (* Linear order instance for Slot *)
 instantiation Slot :: linorder
@@ -78,13 +58,37 @@ instance
       auto intro: order_neq_le_trans simp: less_eq_Epoch_def less_Epoch_def epoch_to_u64_bij)
 end
 
-(* Unsigned arithmetic operators with overflow checks *)
 consts
-  unsigned_add :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
-  unsigned_sub :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
-  unsigned_mul :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
-  unsigned_div :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
-  unsigned_mod :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option"
+  unsigned_add :: "'w \<Rightarrow> 'w \<Rightarrow> ('w, 'a) cont"
+  unsigned_sub :: "'w \<Rightarrow> 'w \<Rightarrow> ('w, 'a) cont"
+  unsigned_mul :: "'w \<Rightarrow> 'w \<Rightarrow> ('w, 'a) cont"
+  unsigned_div :: "'w \<Rightarrow> 'w \<Rightarrow> ('w, 'a) cont"
+  unsigned_mod :: "'w \<Rightarrow> 'w \<Rightarrow> ('w, 'a) cont"
+
+(* word-based arithmetic with overflow checks *)
+context verified_con
+begin
+
+definition word_unsigned_add :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
+  "word_unsigned_add x y \<equiv> do {
+     let result = x + y;
+     if x < result then return result else fail
+   }"
+
+definition slot_unsigned_add :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a) cont" where
+  "slot_unsigned_add x y \<equiv> do {
+    result \<leftarrow> word_unsigned_add (slot_to_u64 x) (slot_to_u64 y);
+    return (Slot result)
+  }"
+
+definition epoch_unsigned_add :: "Epoch \<Rightarrow> Epoch \<Rightarrow> (Epoch, 'a) cont" where
+  "epoch_unsigned_add x y \<equiv> do {
+    result \<leftarrow> word_unsigned_add (epoch_to_u64 x) (epoch_to_u64 y);
+    return (Epoch result)
+  }"
+
+adhoc_overloading
+  unsigned_add word_unsigned_add slot_unsigned_add epoch_unsigned_add
 
 notation
   unsigned_add (infixl ".+" 65) and
@@ -93,116 +97,84 @@ notation
   unsigned_div (infixl "\\" 70) and
   unsigned_mod (infixl ".%" 75)
 
-definition check_bin_op_then ::
-  "('a \<Rightarrow> 'b) \<Rightarrow>
-   ('b \<Rightarrow> 'a) \<Rightarrow>
-   ('a \<Rightarrow> 'a \<Rightarrow> bool) \<Rightarrow>
-   ('a \<Rightarrow> bool) \<Rightarrow>
-   ('b \<Rightarrow> 'b \<Rightarrow> 'b option) \<Rightarrow>
-   'a \<Rightarrow> 'a \<Rightarrow> 'a option" where
-  "check_bin_op_then unwrap wrap arg_check check op x y \<equiv>
-    if arg_check x y then do {
-      result_b \<leftarrow> op (unwrap x) (unwrap y);
-      let result_a = wrap result_b;
-      if check result_a then Some result_a else None
-    } else None"
+lemma add_sanity: "x < 2^64 - 2 \<Longrightarrow> run (x .+ 1) \<noteq> \<top>"
+  apply (clarsimp simp: word_unsigned_add_def run_def Let_unfold return_def plus_1_less fail_def)
+  by (metis less_x_plus_1 word_order.extremum_strict)
 
-definition check_bin_op ::
-  "('a \<Rightarrow> 'b) \<Rightarrow>
-   ('b \<Rightarrow> 'a) \<Rightarrow>
-   ('a \<Rightarrow> 'a \<Rightarrow> bool) \<Rightarrow>
-   ('a \<Rightarrow> bool) \<Rightarrow>
-   ('b \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow>
-   'a \<Rightarrow> 'a \<Rightarrow> 'a option" where
-  "check_bin_op unwrap wrap arg_check check op \<equiv>
-    check_bin_op_then unwrap wrap arg_check check (\<lambda>x y. Some (op x y))"
+definition word_unsigned_mul :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
+  "word_unsigned_mul x y \<equiv>
+     let result = x * y in
+     if result div x = y then return result else fail"
 
-definition any_args :: "'a \<Rightarrow> 'a \<Rightarrow> bool" where
-  "any_args _ _ \<equiv> True"
-
-definition u64_add :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 option" where
-  "u64_add \<equiv> check_bin_op u64_to_nat u64 any_args valid_u64 (+)"
-
-definition u64_sub :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 option" where
-  "u64_sub \<equiv>
-    check_bin_op u64_to_nat u64 (\<lambda>x y. u64_to_nat x \<ge> u64_to_nat y) valid_u64 (-)"
-
-definition u64_mul :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 option" where
-  "u64_mul \<equiv> check_bin_op u64_to_nat u64 any_args valid_u64 (*)"
-
-definition u64_div :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 option" where
-  "u64_div \<equiv> check_bin_op u64_to_nat u64 (\<lambda>_ y. y \<noteq> u64 0) valid_u64 (div)"
-
-definition u64_mod :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 option" where
-  "u64_mod \<equiv> check_bin_op u64_to_nat u64 (\<lambda>_ y. y \<noteq> u64 0) valid_u64 (mod)"
-
-definition lift_slot_bin_op :: "(u64 \<Rightarrow> u64 \<Rightarrow> u64 option) \<Rightarrow> Slot \<Rightarrow> Slot \<Rightarrow> Slot option" where
-  "lift_slot_bin_op \<equiv> check_bin_op_then slot_to_u64 Slot any_args valid_slot"
-
-definition lift_epoch_bin_op :: "(u64 \<Rightarrow> u64 \<Rightarrow> u64 option) \<Rightarrow> Epoch \<Rightarrow> Epoch \<Rightarrow> Epoch option" where
-  "lift_epoch_bin_op \<equiv> check_bin_op_then epoch_to_u64 Epoch any_args valid_epoch"
-
-definition slot_add :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot option" where
-  "slot_add \<equiv> lift_slot_bin_op u64_add"
-
-definition slot_sub :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot option" where
-  "slot_sub \<equiv> lift_slot_bin_op u64_sub"
-
-definition slot_mul :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot option" where
-  "slot_mul \<equiv> lift_slot_bin_op u64_mul"
-
-definition slot_div :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot option" where
-  "slot_div \<equiv> lift_slot_bin_op u64_div"
-
-definition slot_mod :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot option" where
-  "slot_mod \<equiv> lift_slot_bin_op u64_mod"
-
-definition epoch_add :: "Epoch \<Rightarrow> Epoch \<Rightarrow> Epoch option" where
-  "epoch_add \<equiv> lift_epoch_bin_op u64_add"
-
-definition epoch_sub :: "Epoch \<Rightarrow> Epoch \<Rightarrow> Epoch option" where
-  "epoch_sub \<equiv> lift_epoch_bin_op u64_sub"
-
-definition epoch_mul :: "Epoch \<Rightarrow> Epoch \<Rightarrow> Epoch option" where
-  "epoch_mul \<equiv> lift_epoch_bin_op u64_mul"
-
-definition epoch_div :: "Epoch \<Rightarrow> Epoch \<Rightarrow> Epoch option" where
-  "epoch_div \<equiv> lift_epoch_bin_op u64_div"
-
-definition epoch_mod :: "Epoch \<Rightarrow> Epoch \<Rightarrow> Epoch option" where
-  "epoch_mod \<equiv> lift_epoch_bin_op u64_mod"
+definition slot_unsigned_mul :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a) cont" where
+  "slot_unsigned_mul x y \<equiv> do {
+    result \<leftarrow> word_unsigned_mul (slot_to_u64 x) (slot_to_u64 y);
+    return (Slot result)
+  }"
 
 adhoc_overloading
-  unsigned_add u64_add slot_add epoch_add and
-  unsigned_sub u64_sub slot_sub epoch_sub and
-  unsigned_mul u64_mul slot_mul epoch_mul and
-  unsigned_div u64_div slot_div epoch_div and
-  unsigned_mod u64_mod slot_mod epoch_mod
+  unsigned_mul word_unsigned_mul slot_unsigned_mul
 
-lemmas u64_simps = valid_u64_def u64_add_def u64_sub_def u64_mul_def u64_div_def u64_mod_def
-lemmas slot_simps = valid_slot_def slot_add_def slot_sub_def slot_mul_def slot_div_def slot_mod_def
-                    lift_slot_bin_op_def
-lemmas epoch_simps = valid_epoch_def epoch_add_def epoch_sub_def epoch_mul_def epoch_div_def
-                     epoch_mod_def lift_epoch_bin_op_def
-lemmas unsigned_simps = any_args_def check_bin_op_then_def check_bin_op_def
+lemma mul_sanity: "(x :: u64) = 2 ^ 63 - 1 \<Longrightarrow> y = 2 \<Longrightarrow> run (x .* y) \<noteq> \<top>"
+  by (clarsimp simp: word_unsigned_mul_def run_def Let_unfold return_def)
 
-(* Sanity check lemmas *)
-lemma u64_add_overflow_int_max: "u64 (2 ^ 64 - 1) .+ u64 1 = None"
-  by (clarsimp simp: u64_simps unsigned_simps)
+lemma mul_sanity_overflow: "(x :: u64) = 2 ^ 63 \<Longrightarrow> y = 2 \<Longrightarrow> run (x .* y) = \<top>"
+  by (clarsimp simp: word_unsigned_mul_def run_def Let_unfold return_def fail_def)
 
-lemma u64_add_overflow_contradiction: "(u64 (2 ^ 64 - 1) .+ u64 1 = Some (u64 0)) \<Longrightarrow> False"
-  by (clarsimp simp: u64_simps unsigned_simps)
+definition word_unsigned_div :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
+  "word_unsigned_div x y \<equiv>
+     if y \<noteq> 0 then return (x div y) else fail"
 
-lemma u64_sub_overflow_zero: "u64 0 .- u64 1 = None"
-  by (clarsimp simp: u64_simps unsigned_simps)
+definition slot_unsigned_div :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a) cont" where
+  "slot_unsigned_div x y \<equiv> do {
+    result \<leftarrow> word_unsigned_div (slot_to_u64 x) (slot_to_u64 y);
+    return (Slot result)
+  }"
 
-lemma u64_div_zero: "n \\ u64 0 = None"
-  by (clarsimp simp: u64_simps unsigned_simps)
+adhoc_overloading
+  unsigned_div word_unsigned_div slot_unsigned_div
 
-lemma slot_div_zero: "n \\ Slot (u64 0) = None"
-  by (clarsimp simp: slot_simps u64_simps unsigned_simps)
+lemma udiv_sanity: "run ((x :: u64) \\ 2) \<noteq> \<top>"
+  by (clarsimp simp: word_unsigned_div_def run_def Let_unfold return_def)
 
-lemma epoch_leq: "Epoch (u64 n) \<le> (Epoch (u64 (n + 1)))"
-  by (clarsimp simp: less_eq_Epoch_def less_eq_u64_def)
+lemma udiv_sanity_overflow: "run (x \\ 0) = \<top>"
+  by (clarsimp simp: word_unsigned_div_def run_def Let_unfold fail_def)
+
+definition word_unsigned_sub :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
+  "word_unsigned_sub x y \<equiv>
+     let result = x - y in
+     if result \<le> x then return result else fail"
+
+definition slot_unsigned_sub :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a) cont" where
+  "slot_unsigned_sub x y \<equiv> do {
+    result \<leftarrow> word_unsigned_sub (slot_to_u64 x) (slot_to_u64 y);
+    return (Slot result)
+  }"
+
+definition epoch_unsigned_sub :: "Epoch \<Rightarrow> Epoch \<Rightarrow> (Epoch, 'a) cont" where
+  "epoch_unsigned_sub x y \<equiv> do {
+    result \<leftarrow> word_unsigned_sub (epoch_to_u64 x) (epoch_to_u64 y);
+    return (Epoch result)
+  }"
+
+(* TODO(michael) : more epoch ops *)
+adhoc_overloading
+  unsigned_sub word_unsigned_sub slot_unsigned_sub epoch_unsigned_sub
+
+lemma sub_sanity: "(x :: u64) > 1 \<Longrightarrow> run (x .- 1) \<noteq> \<top>"
+  apply (clarsimp simp: word_unsigned_sub_def run_def Let_unfold return_def fail_def)
+  by (metis word_not_simps(1) word_sub_1_le)
+
+lemma u64_max: "2^64 - 1 = (-1 :: 64 word)"
+  by (metis eq_2_64_0 minus_one_word word_exp_length_eq_0)
+
+lemma sub_sanity_max: "run ((2^64 - 1) .- (x :: u64)) \<noteq> \<top>"
+  apply (subst u64_max)
+  by (fastforce simp: word_unsigned_sub_def run_def Let_unfold return_def fail_def)
+
+lemma sub_sanity_overflow: "y \<noteq> 0 \<Longrightarrow> run (0 .- y) = \<top>"
+  by (fastforce simp: word_unsigned_sub_def run_def Let_unfold return_def fail_def)
+
+end
 
 end

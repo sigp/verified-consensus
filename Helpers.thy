@@ -2,36 +2,53 @@ theory Helpers
   imports Utils Types Config Invariants "HOL-Library.Monad_Syntax"
 begin
 
+context verified_con
+begin
+
 definition compute_start_slot_at_epoch :: "Config \<Rightarrow> Epoch \<Rightarrow> Slot" where
-  "compute_start_slot_at_epoch c e \<equiv> Slot (the (epoch_to_u64 e .* SLOTS_PER_EPOCH c))"
+  "compute_start_slot_at_epoch c e \<equiv> Slot (epoch_to_u64 e * SLOTS_PER_EPOCH c)"
 
-definition get_current_epoch :: "Config \<Rightarrow> BeaconState \<Rightarrow> Epoch" where
-  "get_current_epoch c state \<equiv>
-    Epoch (the ((slot_to_u64 (slot_f state) \\ SLOTS_PER_EPOCH c)))"
+definition slot_to_epoch :: "Config \<Rightarrow> Slot \<Rightarrow> Epoch" where
+  "slot_to_epoch c slot \<equiv>
+    Epoch (slot_to_u64 slot div SLOTS_PER_EPOCH c)"
 
-definition get_previous_epoch :: "Config \<Rightarrow> BeaconState \<Rightarrow> Epoch" where
-  "get_previous_epoch c state \<equiv>
-    let current_epoch = get_current_epoch c state in
+definition get_current_epoch :: "(Epoch, 'a) cont " where
+  "get_current_epoch \<equiv> do {
+    slot \<leftarrow> read beacon_slots;
+    return (slot_to_epoch config slot)
+   }"
+
+definition get_previous_epoch :: "(Epoch, 'a) cont" where
+  "get_previous_epoch \<equiv> do {
+    current_epoch \<leftarrow> get_current_epoch;
     if current_epoch = GENESIS_EPOCH then
-      GENESIS_EPOCH
+      return GENESIS_EPOCH
     else
-      the (current_epoch .- Epoch (u64 1))"
+      current_epoch .- Epoch 1
+  }"
 
 definition is_active_validator :: "Validator \<Rightarrow> Epoch \<Rightarrow> bool" where
   "is_active_validator validator e \<equiv>
     activation_epoch_f validator \<le> e \<and> e < exit_epoch_f validator"
 
-definition get_active_validator_indices :: "BeaconState \<Rightarrow> Epoch \<Rightarrow> u64 list" where
-  "get_active_validator_indices state e \<equiv>
-    [i. (i, v) \<leftarrow> enumerate (list_inner (validators_f state)), is_active_validator v e]"
+definition active_validator_indices :: "Epoch \<Rightarrow> Validator VariableList \<Rightarrow> u64 list" where
+  "active_validator_indices e vs \<equiv>
+    [i. (i, v) \<leftarrow> enumerate (var_list_inner vs), is_active_validator v e]"
 
-definition get_eligible_validator_indices :: "Config \<Rightarrow> BeaconState \<Rightarrow> (u64 list) option" where
-  "get_eligible_validator_indices c state \<equiv> do {
-    let previous_epoch = get_previous_epoch c state;
-    previous_epoch_p1 \<leftarrow> previous_epoch .+ Epoch (u64 1);
-    Some [i. (i, v) \<leftarrow> enumerate (list_inner (validators_f state)),
-          is_active_validator v previous_epoch \<or>
-            (slashed_f v \<and> previous_epoch_p1 < withdrawable_epoch_f v)]
+definition get_active_validator_indices :: "Epoch \<Rightarrow> (u64 list, 'a) cont" where
+  "get_active_validator_indices e \<equiv> liftM (active_validator_indices e) (read validators)"
+
+definition eligible_validator_indices :: "Epoch \<Rightarrow> Epoch \<Rightarrow> Validator VariableList \<Rightarrow> u64 list" where
+  "eligible_validator_indices previous_epoch previous_epoch_plus_1 vs \<equiv>
+    [i. (i, v) \<leftarrow> enumerate (var_list_inner vs),
+       is_active_validator v previous_epoch \<or>
+         (slashed_f v \<and> previous_epoch_plus_1 < withdrawable_epoch_f v)]"
+
+definition get_eligible_validator_indices :: "(u64 list, 'a) cont" where
+  "get_eligible_validator_indices \<equiv> do {
+    previous_epoch \<leftarrow> get_previous_epoch;
+    previous_epoch_p1 \<leftarrow> previous_epoch .+ Epoch 1;
+    liftM (eligible_validator_indices previous_epoch previous_epoch_p1) (read validators)
   }"
 
 definition has_flag :: "ParticipationFlags \<Rightarrow> nat \<Rightarrow> bool" where
@@ -39,75 +56,82 @@ definition has_flag :: "ParticipationFlags \<Rightarrow> nat \<Rightarrow> bool"
     case flags of ParticipationFlags bools \<Rightarrow> bools ! flag_index"
 
 definition get_unslashed_participating_indices ::
-   "Config \<Rightarrow> BeaconState \<Rightarrow> nat \<Rightarrow> Epoch \<Rightarrow> (u64 set) option"
+   "nat \<Rightarrow> Epoch \<Rightarrow> (u64 set, 'a) cont"
 where
-  "get_unslashed_participating_indices c state flag_index e \<equiv> do {
-    let previous_epoch = get_previous_epoch c state;
-    let current_epoch = get_current_epoch c state;
-    _ \<leftarrow> assert (e = previous_epoch \<or> e = current_epoch);
-    let epoch_participation = (if e = current_epoch then
-      current_epoch_participation_f state
-    else
-      previous_epoch_participation_f state);
-    let active_validator_indices = get_active_validator_indices state e;
+  "get_unslashed_participating_indices flag_index e \<equiv> do {
+    previous_epoch <- get_previous_epoch;
+    current_epoch <- get_current_epoch;
+    _ \<leftarrow> assertion (\<lambda>_. e = previous_epoch \<or> e = current_epoch);
+    epoch_participation <- (if e = current_epoch then read current_epoch_participation
+                                                 else read previous_epoch_participation);
+    active_validator_indices <- get_active_validator_indices e;
     let participating_indices = [
       i.
       i \<leftarrow> active_validator_indices,
-      has_flag (unsafe_list_index epoch_participation i) flag_index
+      has_flag (unsafe_var_list_index epoch_participation i) flag_index
     ];
-    Some (
-      set (
-        filter (\<lambda>index. \<not> slashed_f (unsafe_list_index (validators_f state) index))
+    v <- read validators;
+    return (
+      list.set (
+        filter (\<lambda>index. \<not> slashed_f (unsafe_var_list_index v index))
                participating_indices))
   }"
 
-definition get_total_balance :: "Config \<Rightarrow> BeaconState \<Rightarrow> u64 set \<Rightarrow> u64 option" where
-  "get_total_balance c state indices \<equiv> do {
-    total \<leftarrow> safe_sum ((\<lambda>i. effective_balance_f (unsafe_list_index (validators_f state) i)) ` indices);
-    Some (max (EFFECTIVE_BALANCE_INCREMENT c) total)
+definition get_total_balance :: " u64 set \<Rightarrow> (u64, 'a) cont" where
+  "get_total_balance indices \<equiv> do {
+    v <- read validators;
+    total \<leftarrow> safe_sum ((\<lambda>i. effective_balance_f (unsafe_var_list_index (v) i)) ` indices);
+    return (max (EFFECTIVE_BALANCE_INCREMENT config) total)
   }"
 
-definition get_total_active_balance :: "Config \<Rightarrow> BeaconState \<Rightarrow> u64 option" where
-  "get_total_active_balance c state \<equiv>
-    get_total_balance c state
-                      (set (get_active_validator_indices state (get_current_epoch c state)))"
+definition get_total_active_balance :: "(u64, 'a) cont" where
+  "get_total_active_balance  \<equiv> do {
+   current_epoch <- get_current_epoch;
+   inds <- get_active_validator_indices current_epoch;
+   get_total_balance (list.set inds)}"
 
-definition get_block_root_at_slot :: "Config \<Rightarrow> BeaconState \<Rightarrow> Slot \<Rightarrow> Hash256 option" where
-  "get_block_root_at_slot c state slot \<equiv> do {
-    upper_limit \<leftarrow> slot .+ Slot (SLOTS_PER_HISTORICAL_ROOT c);
-    _ \<leftarrow> assert (slot < slot_f state \<and> slot_f state \<le> upper_limit);
-    i \<leftarrow> slot_to_u64 slot .% SLOTS_PER_HISTORICAL_ROOT c;
-    vector_index (block_roots_f state) i
+definition get_block_root_at_slot :: "Slot \<Rightarrow> (Hash256, 'a) cont" where
+  "get_block_root_at_slot slot \<equiv> do {
+    upper_limit \<leftarrow> slot .+ Slot (SLOTS_PER_HISTORICAL_ROOT config);
+    state_slot <- read beacon_slots;
+    _ <- assertion (\<lambda>_. slot < state_slot \<and> state_slot \<le> upper_limit);
+    i \<leftarrow> slot_to_u64 slot .% SLOTS_PER_HISTORICAL_ROOT config;
+    b \<leftarrow> read block_roots;
+    lift_option (vector_index b i)
   }"
 
-definition get_block_root :: "Config \<Rightarrow> BeaconState \<Rightarrow> Epoch \<Rightarrow> Hash256 option" where
-  "get_block_root c state epoch \<equiv>
-    get_block_root_at_slot c state (compute_start_slot_at_epoch c epoch)"
+definition get_block_root :: " Epoch \<Rightarrow> (Hash256, 'a) cont" where
+  "get_block_root epoch \<equiv>
+    get_block_root_at_slot (compute_start_slot_at_epoch config epoch)"
 
-definition get_base_reward_per_increment :: "Config \<Rightarrow> BeaconState \<Rightarrow> u64 option" where
-  "get_base_reward_per_increment c state \<equiv> do {
-    total_active_balance \<leftarrow> get_total_active_balance c state;
+definition get_base_reward_per_increment :: " (u64, 'a) cont" where
+  "get_base_reward_per_increment \<equiv> do {
+    total_active_balance \<leftarrow> get_total_active_balance;
     sqrt_total_active_balance \<leftarrow> integer_squareroot total_active_balance;
-    (EFFECTIVE_BALANCE_INCREMENT c .* BASE_REWARD_FACTOR c) \<bind> (flip (\\) sqrt_total_active_balance)
+    x <- EFFECTIVE_BALANCE_INCREMENT config .* BASE_REWARD_FACTOR config;
+    sqrt_total_active_balance \\ x
   }"
 
-definition get_base_reward :: "Config \<Rightarrow> BeaconState \<Rightarrow> u64 \<Rightarrow> u64 option" where
-  "get_base_reward c state index \<equiv> do {
-    validator \<leftarrow> list_index (validators_f state) index;
-    increments \<leftarrow> effective_balance_f validator \\ EFFECTIVE_BALANCE_INCREMENT c;
-    base_reward_per_increment \<leftarrow> get_base_reward_per_increment c state;
+definition get_base_reward :: " u64 \<Rightarrow> (u64, 'a) cont" where
+  "get_base_reward index \<equiv> do {
+    v <- read validators;
+    validator \<leftarrow> lift_option (var_list_index v index);
+    increments \<leftarrow> effective_balance_f validator \\ EFFECTIVE_BALANCE_INCREMENT config;
+    base_reward_per_increment \<leftarrow> get_base_reward_per_increment;
     increments .* base_reward_per_increment
   }"
 
-definition get_finality_delay :: "Config \<Rightarrow> BeaconState \<Rightarrow> u64 option" where
-  "get_finality_delay c state \<equiv>
-    epoch_to_u64 (get_previous_epoch c state) .-
-    epoch_to_u64 (epoch_f (finalized_checkpoint_f state))"
+definition get_finality_delay :: "(u64, 'a) cont" where
+  "get_finality_delay \<equiv> do {
+    previous_epoch <- get_previous_epoch;
+    final <- read finalized_checkpoint;
+    epoch_to_u64 previous_epoch .- epoch_to_u64 (epoch_f final)}"
 
-definition is_in_inactivity_leak :: "Config \<Rightarrow> BeaconState \<Rightarrow> bool option" where
-  "is_in_inactivity_leak c state \<equiv> do {
-    finality_delay \<leftarrow> get_finality_delay c state;
-    Some (finality_delay > MIN_EPOCHS_TO_INACTIVITY_PENALTY c)
+definition is_in_inactivity_leak :: "(bool, 'a) cont" where
+  "is_in_inactivity_leak \<equiv> do {
+    finality_delay \<leftarrow> get_finality_delay;
+    return (finality_delay > MIN_EPOCHS_TO_INACTIVITY_PENALTY config)
   }"
 
+end
 end
