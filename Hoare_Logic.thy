@@ -6,6 +6,16 @@ begin
 declare [[show_sorts=false]]
 
 
+lemma map_insort_sorted: "mono f \<Longrightarrow> sorted xs \<Longrightarrow> map f (insort a xs) = insort (f a) (map f xs)" 
+  apply (induct xs; clarsimp)
+  apply (safe)
+  using monoD apply blast
+  using monoD apply blast
+   apply (simp add: monoD order_antisym)
+  by (smt (verit) insort_is_Cons insort_key.simps(2)
+      linorder_le_cases list.set_cases list.set_intros(1) list.simps(9) monotoneD order_antisym)
+
+
 lemma Id_on_relcomp_eq: "Id_on P O Id_on Q = Id_on (P \<inter> Q)" 
   by (safe; clarsimp simp: Id_on_def, rule relcompI, blast, blast)
 
@@ -600,7 +610,7 @@ lemma maps_to_get_wf:"(maps_to l v \<and>* R) (a, b) \<Longrightarrow> get l a =
   apply (clarsimp simp: sep_conj_def maps_to_def)
   sorry
 
-lemma read_beacon_wp[wp]: "hoare_triple ( (P )) (c v) (Q ) \<Longrightarrow> hoare_triple ( (maps_to l v \<and>* (maps_to l v \<longrightarrow>*  (P )))) (do {v <- read_beacon l ; c v}) (Q  )"
+lemma read_beacon_wp[wp]: "(\<And>a. hoare_triple ( P a) (c a) (Q )) \<Longrightarrow> hoare_triple ( (maps_to l v \<and>* (maps_to l v \<longrightarrow>*  (P v )))) (do {v <- read_beacon l ; c v}) (Q  )"
   apply (clarsimp simp: hoare_triple_def bindCont_def run_def read_beacon_def getState_def )
   apply (clarsimp simp: Sup_le_iff)
   apply (safe)
@@ -611,7 +621,7 @@ lemma read_beacon_wp[wp]: "hoare_triple ( (P )) (c v) (Q ) \<Longrightarrow> hoa
     apply (subst seq_assoc[symmetric])
     apply (subst test_seq_test)
     apply (rule order_trans, rule seq_mono_left)
-     apply (rule test.hom_mono[where p="Collect (P )"])
+     apply (rule test.hom_mono[where p="Collect (P v)"])
      apply (clarsimp)
      apply (sep_solve)
     apply (blast)
@@ -801,7 +811,257 @@ lemma "hoare_triple ( (maps_to a x \<and>* maps_to b y \<and>* maps_to c z)) (se
    apply (sep_cancel)+
   apply (clarsimp simp: max_def)
   done
- 
+
+find_consts "('j \<Rightarrow> 'i option)  \<Rightarrow> ('h \<Rightarrow> 'j option) \<Rightarrow>  ('h \<Rightarrow> 'i option)"
+
+term list_update
+
+definition list_update_opt ::
+  "'e List \<Rightarrow> u64 \<Rightarrow> 'e \<Rightarrow> 'e List option"
+  where
+  "list_update_opt xs i x \<equiv> do {
+    if u64_to_nat i < length (list_inner xs) then
+      Some (List (List.list_update (list_inner xs) (u64_to_nat i) x))
+    else
+      None
+  }"
+
+term validators_f
+
+term Option.bind
+
+term " do {x <- b;  xs <- (validators_f a); list_update_opt xs n x} :: Validator List option "
+
+definition "validator n = Lens ((\<lambda>xs. list_index xs n) \<circ>\<^sub>m validators_f)
+                               (\<lambda>a b. let (new_list :: Validator List option) = do {x <- b;  xs <- (validators_f a); list_update_opt xs n x}
+                                in a\<lparr>validators_f := new_list\<rparr> )"
+lemma lift_option_wp[wp]: 
+  "(\<And>x. f = Some x \<Longrightarrow> hoare_triple ( P x) (c x) Q) \<Longrightarrow>
+    hoare_triple (\<lambda>s. (f \<noteq> None \<longrightarrow> P (the f) s) \<and> f \<noteq> None) (do {x <- lift_option f ; c x}) Q"
+  apply (clarsimp simp: lift_option_def)
+  apply (safe)
+  apply (rule hoare_weaken_pre)
+    apply (wp)
+  apply (clarsimp)
+  apply (clarsimp simp: bindCont_return')
+  done
+
+term safe_sum
+
+find_consts " ('d \<Rightarrow> 'e \<Rightarrow> 'd) \<Rightarrow> 'e set \<Rightarrow> 'd" 
+
+thm finite.inducts
+
+find_theorems "Finite_Set.fold ?f ?z ?S = ?f ?x (Finite_Set.fold ?f ?z (?S - {?x}))" 
+
+find_theorems "?S \<subseteq> insert ?x ?S"
+
+lemma fold_increasing_when: "finite S \<Longrightarrow> (\<And>x y. f y x \<ge> x) \<Longrightarrow> comp_fun_commute_on (insert x S) f \<Longrightarrow> Finite_Set.fold f (\<bottom> :: 'e :: {order_bot}) (S) \<le> Finite_Set.fold f \<bottom> (insert x S)"
+  apply (case_tac "x \<in> S"; clarsimp?)
+  apply (simp add: insert_absorb)
+  apply (subst comp_fun_commute_on.fold_rec) back
+      defer
+      apply (rule order_refl)
+     apply (clarsimp)
+    apply (blast)
+   apply (clarsimp)
+  apply (assumption)
+  done
+
+lemma fold_increasing_when': "finite S \<Longrightarrow> (\<And>x y. f y x \<ge> x) \<Longrightarrow> comp_fun_commute_on (S) f \<Longrightarrow> Finite_Set.fold f (a :: 'e :: {order}) (S - {x}) \<le> Finite_Set.fold f a (S)"
+  apply (case_tac "x \<in> S"; clarsimp?)
+  apply (subst comp_fun_commute_on.fold_rec) back
+      apply (assumption)
+     apply clarsimp
+  apply clarsimp
+   apply (blast)
+  apply (blast)
+  done
+
+lemma append_sorted_list_of_setD: "finite xs  \<Longrightarrow> a # x = sorted_list_of_set xs \<Longrightarrow>sorted_list_of_set (xs - {a}) = x "
+  apply (case_tac "xs = {}"; clarsimp?)
+  apply (induct xs rule: finite.induct; clarsimp)
+  by (metis finite.insertI insert_not_empty list.inject 
+            sorted_list_of_set.sorted_key_list_of_set_insert_remove sorted_list_of_set_nonempty)
+find_theorems sorted_list_of_set "(#)"
+
+lemma inj_image_sub: "inj f \<Longrightarrow> f ` (xs - {a}) = f ` xs - {f a}" 
+  apply (safe; clarsimp)
+   apply (simp add: injD)
+  by blast
+
+lemma commutative_insort_foldr: "comp_fun_commute_on (list.set (a#xs)) f \<Longrightarrow> foldr f (insort a xs) z = f a (foldr f xs z)"
+  apply (induct xs; clarsimp)
+  apply (drule meta_mp)
+  apply (metis comp_fun_commute_on_def insert_iff)
+  apply (clarsimp)
+  by (simp add: comp_fun_commute_on.fun_left_comm)
+
+lemma uadd_welldf: "u64_to_nat a + u64_to_nat b < 2^64 \<Longrightarrow> \<exists>v. a .+ b = Some v"
+  by (clarsimp simp: valid_u64_def any_args_def u64_add_def check_bin_op_def check_bin_op_then_def Let_unfold)
+
+lemma foldr_is_fold: "finite S \<Longrightarrow> comp_fun_commute_on S f \<Longrightarrow> xs = sorted_list_of_set S \<Longrightarrow> 
+  foldr f ( xs) z =  Finite_Set.fold f z S"
+  apply (clarsimp)
+  apply (thin_tac "xs = sorted_list_of_set S")
+  apply (induct S rule:finite.induct; clarsimp)
+  apply (case_tac "a \<in> A"; clarsimp?)
+   apply (simp add: insert_absorb sorted_list_of_set.fold_insort_key.remove)
+  apply (drule meta_mp)
+   apply (simp add: comp_fun_commute_on_def)
+  apply (subst comp_fun_commute_on.fold_rec[rotated], rule order_refl, clarsimp, blast, assumption)
+  apply (clarsimp)
+  by (subst commutative_insort_foldr, clarsimp, clarsimp)
+
+  sledgehammer
+
+lemma u64_add_is_commutative: " comp_fun_commute_on xs (\<lambda>x acc. acc \<bind> u64_add x)"
+  apply (clarsimp simp: comp_fun_commute_on_def, rule ext, clarsimp)
+  apply (case_tac xa; clarsimp)
+  by (clarsimp simp: Option.bind_def u64_add_def check_bin_op_def check_bin_op_then_def any_args_def Let_unfold valid_u64_def)
+sledgehammer 
+
+lemma [simp]:"comp_fun_commute_on (S :: nat set) (+)"
+  by (clarsimp simp: comp_fun_commute_on_def, rule ext, clarsimp)
+
+find_theorems insort
+lemma "mono f \<Longrightarrow> map f (insort a xs) = insort (f a) (map f xs)" 
+  apply (induct xs; clarsimp)
+  apply (safe)
+  using monoD apply blast
+  using monoD apply blast
+   apply (simp add: monoD order_antisym)
+  
+
+lemma idk: "finite S \<Longrightarrow> xs = sorted_list_of_set S \<Longrightarrow> mono f \<Longrightarrow> inj f \<Longrightarrow>
+  map f xs = sorted_list_of_set (f ` S)"
+  apply (induct S  arbitrary: xs rule: finite.inducts, clarsimp)
+  apply (clarsimp)
+  apply (case_tac "a \<in> A"; clarsimp?)
+   apply (metis finite_imageI image_eqI sorted_list_of_set.fold_insort_key.remove)
+  apply (simp add: map_insort_sorted)
+  by (simp add: inj_image_mem_iff)
+
+lemma "((Option.bind x f) = Some v) \<longleftrightarrow> (\<exists>a. x = Some a \<and> f a = Some v)"
+
+lemma foldr_safe_add_is_add: "(foldr (\<lambda>x acc. acc \<bind> (.+) x) x (Some (u64.u64 0))) = Some y \<Longrightarrow> 
+       foldr ((+) \<circ> u64_to_nat) x 0 = 
+       u64_to_nat (the (foldr (\<lambda>x acc. acc \<bind> (.+) x) x (Some (u64.u64 0))))"
+  apply (induct x arbitrary: y ; clarsimp)
+  apply (clarsimp simp: bind_eq_Some_conv)
+  by (smt (verit, ccfv_SIG) bind_eq_Some_conv check_bin_op_def 
+     check_bin_op_then_def option.distinct(1) option.inject u64_add_def u64_to_nat.simps)
+
+lemma safe_sum_boundedI: "finite xs \<Longrightarrow> (\<And>x. Finite_Set.fold (+) 0 (u64_to_nat ` xs) < 2 ^ 64) \<Longrightarrow> (\<exists>y. safe_sum xs = Some y)"
+  apply (clarsimp simp: safe_sum_def)
+  apply (induct \<open>sorted_list_of_set xs\<close> arbitrary: xs)
+   apply (clarsimp)
+  apply (clarsimp)
+  apply (atomize)
+  apply (clarsimp)
+  apply (erule_tac x="xs - {a}" in allE)
+  apply (drule mp, clarsimp?)
+  apply (rule sym)
+   apply (erule (1) append_sorted_list_of_setD)
+  apply (drule mp, clarsimp)
+  apply (drule mp)
+   apply (erule le_less_trans[rotated])
+  apply (subst inj_image_sub)
+    apply (meson injI u64_to_nat_bij)
+   apply (rule fold_increasing_when')
+     apply (clarsimp)
+    apply (linarith)
+   apply (simp add: comp_fun_commute_on_def)
+   apply (clarsimp)
+   apply (rule ext, clarsimp)
+  apply (clarsimp)
+  apply (subgoal_tac "a \<in> xs")
+  apply (clarsimp simp: append_sorted_list_of_setD)
+   apply (rule subst, assumption)
+  apply (subst foldr_Cons)
+   apply (clarsimp)
+   apply (subst (asm) foldr_is_fold[symmetric], clarsimp, clarsimp)
+    apply (rule idk, assumption, assumption)
+  using less_eq_u64_def monoI apply blast
+    apply (simp add: inj_def u64_to_nat_bij)
+   apply (subst (asm) list.map(2), simp)
+
+   apply (rule uadd_welldf)
+   apply (clarsimp simp: foldr_map)
+  thm arg_cong
+   apply (frule arg_cong[where f="u64_to_nat o the"], clarsimp)
+  apply (subgoal_tac "foldr ((+) \<circ> u64_to_nat) x 0 = u64_to_nat (the (foldr (\<lambda>x acc. acc \<bind> (.+) x) x (Some (u64.u64 0))))")
+  
+    apply (clarsimp)
+   apply (rule foldr_safe_add_is_add, assumption)
+  by (metis insertCI list.simps(15) sorted_list_of_set.set_sorted_key_list_of_set)
+
+lemma "\<lblot>P\<rblot> (c x) \<lblot>Q\<rblot> \<Longrightarrow> (\<And>R. \<lblot> (pre \<and>* R) \<rblot> f \<lblot>(post \<and>* R) \<rblot>) \<Longrightarrow> run f = run f ; run (g x) \<Longrightarrow>
+   \<lblot> (pre \<and>* (post \<longrightarrow>* P)) \<rblot> do {x <- f; c x} \<lblot> Q \<rblot>"
+  apply (clarsimp simp: bindCont_def)
+
+definition get_current_epoch :: "(Epoch, 'a) cont" where
+  "get_current_epoch \<equiv> do {
+     s <- read beacon_slots;
+     current_epoch <- lift_option ( (slot_to_u64 s) \\ SLOTS_PER_EPOCH config);
+     return (Epoch current_epoch)}"
+
+lemma get_total_active_balance_wp[wp]: 
+ "(\<And>x. \<lblot>P x\<rblot> (c x) \<lblot>Q\<rblot>) \<Longrightarrow> (slot_to_u64 slots \\ SLOTS_PER_EPOCH config) = Some current_epoch \<Longrightarrow>
+  active_validators = [i. (i, v) \<leftarrow> enumerate (list_inner vs), is_active_validator v (Epoch current_epoch)] \<Longrightarrow>
+  max (EFFECTIVE_BALANCE_INCREMENT config) total \<Longrightarrow>   
+   \<lblot> (maps_to (validators) vs \<and>* maps_to beacon_slots slots \<and>* 
+     ((maps_to validators vs \<and>* maps_to beacon_slots slots)\<longrightarrow>* P y)) \<rblot>
+   do {x <- get_total_active_balance ; c x}
+   \<lblot>Q\<rblot>"
+ apply (clarsimp simp: get_total_active_balance_def get_current_epoch_def)
+  apply (rule hoare_weaken_pre)
+   apply (wp)
+
+   apply (clarsimp simp: get_active_validator_indices_def, wp)
+   apply (clarsimp simp: get_total_balance_def, wp)
+  apply (clarsimp)
+  apply (sep_cancel)+
+  apply (safe, sep_cancel+)
+   apply (clarsimp)
+  apply (safe; clarsimp?)
+   apply (rule safe_sum_boundedI, rule finite_imageI)
+
+lemma get_total_active_balance_wp[wp]: 
+ "\<lblot> (maps_to (validators) vs \<and>* maps_to beacon_slots slots \<and>* R) \<rblot>
+   get_total_active_balance \<lblot>(maps_to validators vs \<and>* maps_to beacon_slots slots \<and>* R)\<rblot>"
+  apply (clarsimp simp: get_total_active_balance_def get_current_epoch_def)
+  apply (rule hoare_weaken_pre)
+   apply (wp)
+   apply (clarsimp simp: get_active_validator_indices_def, wp)
+   apply (clarsimp simp: get_total_balance_def, wp)
+  apply (clarsimp)
+  apply (sep_cancel)+
+  apply (safe, sep_cancel+)
+   apply (clarsimp)
+   apply (rule safe_sum_boundedI, rule finite_imageI)
+  apply (clarsimp)
+   apply (clarsimp)
+  sorry
+
+lemma  get_base_reward_per_increment_wp: 
+ "\<lblot> (maps_to (validator index) v \<and>* R) \<rblot>
+                 (get_base_reward_per_increment )  \<lblot>(maps_to (validator index) v \<and>* R)\<rblot>"
+  apply (clarsimp simp: get_base_reward_per_increment_def)
+  apply (rule hoare_weaken_pre)
+
+  apply (wp)
+
+lemma get_base_reward_wp: 
+  "\<lblot> (maps_to (validator index) v \<and>* R) \<rblot>
+                 (get_base_reward index)  \<lblot>(maps_to (validator index) v \<and>* R)\<rblot>"
+  apply (clarsimp simp: get_base_reward_def)
+  apply (rule hoare_weaken_pre)
+
+   apply (wp)
+   apply (clarsimp simp: get_base_reward_per_increment_def get_total_active_balance_def get_current_epoch_def)
+  apply (wp)
+
 
 
 

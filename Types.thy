@@ -85,4 +85,6 @@ record BeaconState =
   current_sync_committee_f :: "SyncCommittee option"
   next_sync_committee_f :: "SyncCommittee option"
 
+print_theorems
+
 end
