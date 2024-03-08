@@ -72,7 +72,7 @@ begin
 definition word_unsigned_add :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
   "word_unsigned_add x y \<equiv> do {
      let result = x + y;
-     if x < result then return result else fail
+     if x \<le> result then return result else fail
    }"
 
 definition slot_unsigned_add :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a) cont" where
@@ -99,7 +99,7 @@ notation
 
 lemma add_sanity: "x < 2^64 - 2 \<Longrightarrow> run (x .+ 1) \<noteq> \<top>"
   apply (clarsimp simp: word_unsigned_add_def run_def Let_unfold return_def plus_1_less fail_def)
-  by (metis less_x_plus_1 word_order.extremum_strict)
+  by (metis inc_i less_x_plus_1 olen_add_eqv order_less_imp_le word_order.extremum)
 
 definition word_unsigned_mul :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
   "word_unsigned_mul x y \<equiv>

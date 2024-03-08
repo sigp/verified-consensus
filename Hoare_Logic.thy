@@ -1,10 +1,13 @@
 theory Hoare_Logic
   imports Translation_Test "algebra/rg-algebra/AbstractAtomicTest/Programming_Constructs" 
   "jormungand/sep_algebra/Sep_Tactics"
+  Word_Lib.More_Divides Word_Lib.Word_EqI
+Word_Lib.Word_64 Word_Lib.Bitwise Word_Lib.Word_Lemmas
 begin
 
 declare [[show_sorts=false]]
 
+term "when"
 
 lemma map_insort_sorted: "mono f \<Longrightarrow> sorted xs \<Longrightarrow> map f (insort a xs) = insort (f a) (map f xs)" 
   apply (induct xs; clarsimp)
@@ -812,12 +815,42 @@ lemma "hoare_triple ( (maps_to a x \<and>* maps_to b y \<and>* maps_to c z)) (se
   apply (clarsimp simp: max_def)
   done
 
-find_consts "('j \<Rightarrow> 'i option)  \<Rightarrow> ('h \<Rightarrow> 'j option) \<Rightarrow>  ('h \<Rightarrow> 'i option)"
+
+lemma add_wp[wp]: "hoare_triple (P (n + m)) (c (n + m)) Q \<Longrightarrow>
+  hoare_triple (\<lambda>s. n \<le> n + m \<and> (n \<le> n + m \<longrightarrow> P (n + m) s)) 
+(do {x <- (n .+ m); c x}) Q"
+  apply (rule hoare_weaken_pre)
+   apply (clarsimp simp:  word_unsigned_add_def )
+   apply (simp only: Let_unfold)
+   apply (wp, clarsimp simp: bindCont_return')
+  done
+    apply (atomize)
+    apply (erule_tac x="n + m" in allE, assumption, wp)
+  apply (clarsimp)
+  done
+
+
+lemma div_wp[wp]: "hoare_triple (P (n div m)) (c (n div m)) Q \<Longrightarrow>
+  hoare_triple (\<lambda>s. m \<noteq> 0 \<and> (m \<noteq> 0 \<longrightarrow> P ( n div m) s)) 
+(do {x <- (word_unsigned_div n m); c x}) Q"
+  apply (rule hoare_weaken_pre)
+   apply (unfold word_unsigned_div_def, wp)
+   apply (clarsimp simp: bindCont_return')
+
+  done
+
+
+end
+end
+(*
+
+
 
 term list_update
 
+
 definition list_update_opt ::
-  "'e List \<Rightarrow> u64 \<Rightarrow> 'e \<Rightarrow> 'e List option"
+  "'e list \<Rightarrow> u64 \<Rightarrow> 'e \<Rightarrow> 'e list option"
   where
   "list_update_opt xs i x \<equiv> do {
     if u64_to_nat i < length (list_inner xs) then
@@ -826,11 +859,6 @@ definition list_update_opt ::
       None
   }"
 
-term validators_f
-
-term Option.bind
-
-term " do {x <- b;  xs <- (validators_f a); list_update_opt xs n x} :: Validator List option "
 
 definition "validator n = Lens ((\<lambda>xs. list_index xs n) \<circ>\<^sub>m validators_f)
                                (\<lambda>a b. let (new_list :: Validator List option) = do {x <- b;  xs <- (validators_f a); list_update_opt xs n x}
@@ -845,16 +873,6 @@ lemma lift_option_wp[wp]:
   apply (clarsimp)
   apply (clarsimp simp: bindCont_return')
   done
-
-term safe_sum
-
-find_consts " ('d \<Rightarrow> 'e \<Rightarrow> 'd) \<Rightarrow> 'e set \<Rightarrow> 'd" 
-
-thm finite.inducts
-
-find_theorems "Finite_Set.fold ?f ?z ?S = ?f ?x (Finite_Set.fold ?f ?z (?S - {?x}))" 
-
-find_theorems "?S \<subseteq> insert ?x ?S"
 
 lemma fold_increasing_when: "finite S \<Longrightarrow> (\<And>x y. f y x \<ge> x) \<Longrightarrow> comp_fun_commute_on (insert x S) f \<Longrightarrow> Finite_Set.fold f (\<bottom> :: 'e :: {order_bot}) (S) \<le> Finite_Set.fold f \<bottom> (insert x S)"
   apply (case_tac "x \<in> S"; clarsimp?)
@@ -913,7 +931,6 @@ lemma foldr_is_fold: "finite S \<Longrightarrow> comp_fun_commute_on S f \<Longr
   apply (clarsimp)
   by (subst commutative_insort_foldr, clarsimp, clarsimp)
 
-  sledgehammer
 
 lemma u64_add_is_commutative: " comp_fun_commute_on xs (\<lambda>x acc. acc \<bind> u64_add x)"
   apply (clarsimp simp: comp_fun_commute_on_def, rule ext, clarsimp)
@@ -941,8 +958,6 @@ lemma idk: "finite S \<Longrightarrow> xs = sorted_list_of_set S \<Longrightarro
    apply (metis finite_imageI image_eqI sorted_list_of_set.fold_insort_key.remove)
   apply (simp add: map_insort_sorted)
   by (simp add: inj_image_mem_iff)
-
-lemma "((Option.bind x f) = Some v) \<longleftrightarrow> (\<exists>a. x = Some a \<and> f a = Some v)"
 
 lemma foldr_safe_add_is_add: "(foldr (\<lambda>x acc. acc \<bind> (.+) x) x (Some (u64.u64 0))) = Some y \<Longrightarrow> 
        foldr ((+) \<circ> u64_to_nat) x 0 = 
@@ -996,10 +1011,6 @@ lemma safe_sum_boundedI: "finite xs \<Longrightarrow> (\<And>x. Finite_Set.fold 
    apply (rule foldr_safe_add_is_add, assumption)
   by (metis insertCI list.simps(15) sorted_list_of_set.set_sorted_key_list_of_set)
 
-lemma "\<lblot>P\<rblot> (c x) \<lblot>Q\<rblot> \<Longrightarrow> (\<And>R. \<lblot> (pre \<and>* R) \<rblot> f \<lblot>(post \<and>* R) \<rblot>) \<Longrightarrow> run f = run f ; run (g x) \<Longrightarrow>
-   \<lblot> (pre \<and>* (post \<longrightarrow>* P)) \<rblot> do {x <- f; c x} \<lblot> Q \<rblot>"
-  apply (clarsimp simp: bindCont_def)
-
 definition get_current_epoch :: "(Epoch, 'a) cont" where
   "get_current_epoch \<equiv> do {
      s <- read beacon_slots;
@@ -1009,7 +1020,8 @@ definition get_current_epoch :: "(Epoch, 'a) cont" where
 lemma get_total_active_balance_wp[wp]: 
  "(\<And>x. \<lblot>P x\<rblot> (c x) \<lblot>Q\<rblot>) \<Longrightarrow> (slot_to_u64 slots \\ SLOTS_PER_EPOCH config) = Some current_epoch \<Longrightarrow>
   active_validators = [i. (i, v) \<leftarrow> enumerate (list_inner vs), is_active_validator v (Epoch current_epoch)] \<Longrightarrow>
-  max (EFFECTIVE_BALANCE_INCREMENT config) total \<Longrightarrow>   
+  s_balances = undefined \<Longrightarrow>
+  max (EFFECTIVE_BALANCE_INCREMENT config) s_balances = y \<Longrightarrow>   
    \<lblot> (maps_to (validators) vs \<and>* maps_to beacon_slots slots \<and>* 
      ((maps_to validators vs \<and>* maps_to beacon_slots slots)\<longrightarrow>* P y)) \<rblot>
    do {x <- get_total_active_balance ; c x}
@@ -1033,7 +1045,7 @@ lemma get_total_active_balance_wp[wp]:
   apply (clarsimp simp: get_total_active_balance_def get_current_epoch_def)
   apply (rule hoare_weaken_pre)
    apply (wp)
-   apply (clarsimp simp: get_active_validator_indices_def, wp)
+   apply (clarsimp simp: get_active_validator_indices_def)
    apply (clarsimp simp: get_total_balance_def, wp)
   apply (clarsimp)
   apply (sep_cancel)+
@@ -1069,3 +1081,4 @@ end
 
 
 end
+*)

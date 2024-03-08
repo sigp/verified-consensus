@@ -45,26 +45,34 @@ definition bitvector_all :: "Bitvector \<Rightarrow> nat \<Rightarrow> nat \<Rig
   "bitvector_all bv start end \<equiv>
     list_all (\<lambda>x. x) (take (end - start) (drop start (bitvector_inner bv)))"
 
+
 function integer_squareroot_aux :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 \<Rightarrow> ((u64 \<times> u64), 'a) cont" where
   "integer_squareroot_aux x y n =
-    (if y < x then
+    (if y \<ge> x then
       return (x, y)
     else do {
-      let x' = y;
-      y' \<leftarrow> x' .+ n;
-      integer_squareroot_aux x' y' n
+      offset <- n \\ y;
+      y' \<leftarrow> y .+ offset;
+      integer_squareroot_aux y (y' div 2) n
   })"
   by auto
+termination 
+  apply (relation "measure (\<lambda>(x,y,n). unat x)") unfolding word_add_def
+   apply (clarsimp)
+  apply (subst in_measure, clarify)
+  apply (clarsimp)
+  by (simp add: unat_mono)
+
+
 
 (* https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/beacon-chain.md#integer_squareroot *)
 definition integer_squareroot :: "u64 \<Rightarrow> (u64, 'a) cont" where
-  "integer_squareroot n \<equiv> do {
+ "integer_squareroot n = do {
     let x = n;
     x_plus_1 \<leftarrow> x .+ 1;
     y \<leftarrow> x_plus_1 \\ 2;
     (x', _) \<leftarrow> integer_squareroot_aux x y n;
     return x'
-  }"
-
+  }" 
 end
 end
