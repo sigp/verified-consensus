@@ -79,7 +79,7 @@ where
      current_epoch  <- get_current_epoch;
      old_previous_justified_checkpoint <- read previous_justified_checkpoint;
      old_current_justified_checkpoint  <- read current_justified_checkpoint;
-     _ <- (current_justified_checkpoint ::= old_current_justified_checkpoint);
+     _ <- (previous_justified_checkpoint ::= old_current_justified_checkpoint);
      bits <- read justification_bits;
      let shifted_justification_bits = shift_and_clear_bitvector config bits;
      _ <- (justification_bits ::= shifted_justification_bits);

@@ -829,6 +829,33 @@ lemma add_wp[wp]: "hoare_triple (P (n + m)) (c (n + m)) Q \<Longrightarrow>
   apply (clarsimp)
   done
 
+lemma add_wp_slot[wp]: "hoare_triple (P ((n :: Slot) + m)) (c (n + m)) Q \<Longrightarrow>
+  hoare_triple (\<lambda>s. n \<le> n + m \<and> (n \<le> n + m \<longrightarrow> P (n + m) s)) 
+(do {x <- (n .+ m); c x}) Q"
+  apply (rule hoare_weaken_pre)
+   apply (clarsimp simp: slot_unsigned_add_def word_unsigned_add_def)
+   apply (simp only: Let_unfold)
+   apply (wp, clarsimp simp: bindCont_return' plus_Slot_def)
+    apply assumption
+   apply wp
+  apply (clarsimp simp: plus_Slot_def)
+  apply safe
+  apply (fastforce simp: less_eq_Slot_def)
+  done
+
+lemma mod_wp[wp]: "hoare_triple (P (n mod m)) (c (n mod m)) Q \<Longrightarrow>
+  hoare_triple (\<lambda>s. n \<le> n mod m \<and> (n \<le> n mod m \<longrightarrow> P (n mod m) s)) 
+(do {x <- (n .% m); c x}) Q"
+  apply (rule hoare_weaken_pre)
+   apply (clarsimp simp: word_unsigned_mod_def)
+   apply (simp only: Let_unfold)
+   apply (wp, clarsimp simp: bindCont_return' plus_Slot_def)
+    apply assumption
+   apply wp
+  apply (clarsimp simp: plus_Slot_def)
+  apply safe
+  apply (fastforce simp: less_eq_Slot_def)
+  done
 
 lemma div_wp[wp]: "hoare_triple (P (n div m)) (c (n div m)) Q \<Longrightarrow>
   hoare_triple (\<lambda>s. m \<noteq> 0 \<and> (m \<noteq> 0 \<longrightarrow> P ( n div m) s)) 
