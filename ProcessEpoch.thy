@@ -263,6 +263,36 @@ where
     return ()
   }}"
 
+
+definition sum_vector :: 
+  "(64 word) Vector \<Rightarrow> (64 word, 'a) cont" where
+"sum_vector vs = foldrM word_unsigned_add (vector_inner vs) 0" 
+
+abbreviation (input) "forM xs f \<equiv> mapM f xs"
+
+definition process_slashings ::
+  "(unit, 'a) cont" where
+"process_slashings \<equiv> do {
+  current_epoch <- get_current_epoch;
+  total_balance <- get_total_active_balance;
+  sls <- read slashings;
+  total_slashings <- sum_vector sls;
+  adjusted_slashings <- total_slashings .* PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX;
+  let adjusted_total_slashing_balance = min adjusted_slashings total_balance;
+  validators <- read validators;
+  _ <- forM (enumerate (var_list_inner validators))
+     (\<lambda>(index,validator). do {
+        vec <- word_unsigned_div (EPOCHS_PER_SLASHINGS_VECTOR config) 2;
+        epoch <- epoch_unsigned_add current_epoch (Epoch vec);
+        when (slashed_f validator \<and> epoch = withdrawable_epoch_f validator)
+            (do { let increment = EFFECTIVE_BALANCE_INCREMENT config;
+                   x <- increment .* adjusted_total_slashing_balance;
+                   pen_num <- word_unsigned_div (effective_balance_f validator) x;
+                   y <- total_balance .* increment;
+                   penalty <- word_unsigned_div pen_num y;
+                   decrease_balance index penalty})});
+  return ()
+}"
 end
 
 end
