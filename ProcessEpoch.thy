@@ -209,6 +209,60 @@ where
     return ()
     }}"
 
+definition get_inactivity_score ::
+  "u64 \<Rightarrow> (u64, 'a) cont"
+where
+  "get_inactivity_score index \<equiv> do {
+     scores \<leftarrow> read inactivity_scores;
+     lift_option (var_list_index scores index)
+  }"
+
+definition set_inactivity_score ::
+  "u64 \<Rightarrow> u64 \<Rightarrow> (unit, 'a) cont"
+where
+  "set_inactivity_score index score \<equiv> do {
+     orig_scores \<leftarrow> read inactivity_scores;
+     orig_score \<leftarrow> lift_option (var_list_index orig_scores index);
+     new_scores \<leftarrow> var_list_update orig_scores index score;
+     inactivity_scores ::= new_scores
+  }"
+
+definition process_inactivity_updates ::
+  "(unit, 'a) cont"
+where
+  "process_inactivity_updates \<equiv> do {
+    current_epoch \<leftarrow> get_current_epoch;
+    if current_epoch = GENESIS_EPOCH then return ()
+    else do {
+    previous_epoch \<leftarrow> get_previous_epoch;
+    eligible_validator_indices \<leftarrow> get_eligible_validator_indices;
+    _ \<leftarrow> mapM (\<lambda>index. do {
+      unslashed_participating_indices \<leftarrow> get_unslashed_participating_indices
+                                          TIMELY_TARGET_FLAG_INDEX
+                                          previous_epoch;
+      _ \<leftarrow> (if index \<in> unslashed_participating_indices then do {
+        current_inactivity_score \<leftarrow> get_inactivity_score index;
+        new_inactivity_score \<leftarrow> current_inactivity_score .- (min 1 current_inactivity_score);
+        set_inactivity_score index new_inactivity_score
+      } else do {
+        current_inactivity_score \<leftarrow> get_inactivity_score index;
+        new_inactivity_score \<leftarrow> current_inactivity_score .+ INACTIVITY_SCORE_BIAS config;
+        set_inactivity_score index new_inactivity_score
+      });
+      inactivity_leak \<leftarrow> is_in_inactivity_leak;
+      _ \<leftarrow> (if \<not> inactivity_leak then do {
+        current_inactivity_score \<leftarrow> get_inactivity_score index;
+        let decrement = min (INACTIVITY_SCORE_RECOVERY_RATE config) current_inactivity_score;
+        new_inactivity_score \<leftarrow> current_inactivity_score .- decrement;
+        set_inactivity_score index new_inactivity_score
+      } else
+        return ()
+      );
+      return ()
+    }) eligible_validator_indices;
+    return ()
+  }}"
+
 end
 
 end
