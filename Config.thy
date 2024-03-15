@@ -64,4 +64,14 @@ definition PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX :: u64 where
 definition SLOTS_PER_ETH1_VOTING_PERIOD :: "Config \<Rightarrow> u64" where
   "SLOTS_PER_ETH1_VOTING_PERIOD c \<equiv> EPOCHS_PER_ETH1_VOTING_PERIOD c * SLOTS_PER_EPOCH c"
 
+definition 
+"HYSTERESIS_QUOTIENT \<equiv> 4 :: u64"
+definition 
+"HYSTERESIS_DOWNWARD_MULTIPLIER \<equiv> 1 :: u64"
+definition 
+"HYSTERESIS_UPWARD_MULTIPLIER \<equiv> 5 :: u64"
+
+definition 
+ "MAX_EFFECTIVE_BALANCE \<equiv> undefined :: u64"
+
 end

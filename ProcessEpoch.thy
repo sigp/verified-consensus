@@ -132,8 +132,8 @@ where
       let (rewards, penalties) = opt;
       let index_nat = u64_to_nat index;
       if index \<notin> matching_target_indices then do {
-        validator \<leftarrow> lift_option (var_list_index vs index);
-        inactivity_score \<leftarrow> lift_option (var_list_index scores index);
+        validator \<leftarrow>  (var_list_index vs index);
+        inactivity_score \<leftarrow>  (var_list_index scores index);
         penalty_numerator \<leftarrow> effective_balance_f validator .* inactivity_score;
         penalty_denominator \<leftarrow> INACTIVITY_SCORE_BIAS config .* INACTIVITY_PENALTY_QUOTIENT_ALTAIR;
         penalty \<leftarrow> penalty_numerator \\ penalty_denominator;
@@ -145,7 +145,7 @@ where
     return (final_rewards, final_penalties)
   }"
 
-(* TODO: use this more? *)
+(* TODO: use this more? 
 definition var_list_update ::
   "'b VariableList \<Rightarrow> u64 \<Rightarrow> 'b \<Rightarrow> ('b VariableList, 'a) cont"
   where
@@ -155,15 +155,16 @@ definition var_list_update ::
     else
       fail
   }"
+*)
 
 definition increase_balance ::
   "u64 \<Rightarrow> u64 \<Rightarrow> (unit, 'a) cont"
   where
   "increase_balance index reward \<equiv> do {
      orig_balances \<leftarrow> read balances;
-     orig_balance \<leftarrow> lift_option (var_list_index orig_balances index);
+     orig_balance \<leftarrow>  (var_list_index orig_balances index);
      new_balance \<leftarrow> orig_balance .+ reward;
-     new_balances \<leftarrow> var_list_update orig_balances index new_balance;
+     new_balances \<leftarrow> var_list_update new_balance orig_balances index ;
      balances ::= new_balances
   }"
 
@@ -172,9 +173,9 @@ definition decrease_balance ::
   where
   "decrease_balance index penalty \<equiv> do {
      orig_balances \<leftarrow> read balances;
-     orig_balance \<leftarrow> lift_option (var_list_index orig_balances index);
+     orig_balance \<leftarrow>  (var_list_index orig_balances index);
      let new_balance = nat_to_u64 (u64_to_nat orig_balance - u64_to_nat penalty);
-     new_balances \<leftarrow> var_list_update orig_balances index new_balance;
+     new_balances \<leftarrow> var_list_update new_balance orig_balances index ;
      balances ::= new_balances
   }"
 
@@ -214,7 +215,7 @@ definition get_inactivity_score ::
 where
   "get_inactivity_score index \<equiv> do {
      scores \<leftarrow> read inactivity_scores;
-     lift_option (var_list_index scores index)
+      (var_list_index scores index)
   }"
 
 definition set_inactivity_score ::
@@ -222,8 +223,8 @@ definition set_inactivity_score ::
 where
   "set_inactivity_score index score \<equiv> do {
      orig_scores \<leftarrow> read inactivity_scores;
-     orig_score \<leftarrow> lift_option (var_list_index orig_scores index);
-     new_scores \<leftarrow> var_list_update orig_scores index score;
+     orig_score \<leftarrow>  (var_list_index orig_scores index);
+     new_scores \<leftarrow> var_list_update score orig_scores index ;
      inactivity_scores ::= new_scores
   }"
 
@@ -293,6 +294,29 @@ definition process_slashings ::
                    decrease_balance index penalty})});
   return ()
 }"
+
+
+definition process_effective_balance_updates :: 
+  "(unit, 'a) cont" where
+ "process_effective_balance_updates \<equiv> do {
+       vs <- read validators;
+       new_validators <- forM (enumerate (var_list_inner vs))
+            (\<lambda>(index, v). do {
+               balances <- read balances;
+               balance <- var_list_index balances index;
+               hysteresis_increment <- word_unsigned_div (EFFECTIVE_BALANCE_INCREMENT config) HYSTERESIS_QUOTIENT;
+               downward_threshold <- hysteresis_increment .* HYSTERESIS_DOWNWARD_MULTIPLIER;
+               upward_threshold <- hysteresis_increment .* HYSTERESIS_UPWARD_MULTIPLIER;
+               lower <- balance .+ downward_threshold;
+               let effective_balance = effective_balance_f v;
+               upper <- effective_balance .+ upward_threshold;
+               if (lower < effective_balance \<or> upper < balance)
+                   then (do { b <- word_unsigned_mod balance (EFFECTIVE_BALANCE_INCREMENT config);
+                          b' <- balance .- b;
+                          return (v\<lparr>effective_balance_f := min b' (MAX_EFFECTIVE_BALANCE)\<rparr>)})
+                   else  (return v)});
+         (write_to validators (VariableList new_validators))}
+ "
 end
 
 end

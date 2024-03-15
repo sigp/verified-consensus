@@ -11,18 +11,25 @@ definition enumerate :: "'b list \<Rightarrow> (u64 \<times> 'b) list" where
 definition safe_sum :: "u64 set \<Rightarrow> (u64, 'a) cont" where
   "safe_sum s \<equiv> foldrM (.+) (sorted_list_of_set s) 0"
 
-definition var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> 'b option" where
+definition var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> ('b, 'a) cont" where
   "var_list_index l i \<equiv>
     if i < var_list_len l then
-      Some (var_list_inner l ! u64_to_nat i)
+      return (var_list_inner l ! u64_to_nat i)
     else
-      None"
+      fail"
+
+definition var_list_update :: "'b \<Rightarrow> 'b VariableList \<Rightarrow> u64 \<Rightarrow> ('b VariableList, 'a) cont" where
+  "var_list_update e l i \<equiv>
+    if i < var_list_len l then
+      return ( VariableList (list_update (var_list_inner l) (u64_to_nat i) e))
+    else
+      fail"
 
 definition var_list_inner :: "'b VariableList \<Rightarrow> 'b list" where
   "var_list_inner l \<equiv> case l of VariableList inner \<Rightarrow> inner"
 
 definition unsafe_var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> 'b" where
-  "unsafe_var_list_index l i \<equiv> the (var_list_index l i)"
+  "unsafe_var_list_index l i \<equiv>  (var_list_inner l ! unat i) "
 
 definition vector_index :: "'b Vector \<Rightarrow> u64 \<Rightarrow> 'b option" where
   "vector_index v i \<equiv>

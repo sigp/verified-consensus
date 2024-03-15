@@ -115,7 +115,7 @@ definition get_base_reward_per_increment :: " (u64, 'a) cont" where
 definition get_base_reward :: " u64 \<Rightarrow> (u64, 'a) cont" where
   "get_base_reward index \<equiv> do {
     v <- read validators;
-    validator \<leftarrow> lift_option (var_list_index v index);
+    validator \<leftarrow>  (var_list_index v index);
     increments \<leftarrow> effective_balance_f validator \\ EFFECTIVE_BALANCE_INCREMENT config;
     base_reward_per_increment \<leftarrow> get_base_reward_per_increment;
     increments .* base_reward_per_increment
