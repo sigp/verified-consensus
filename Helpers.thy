@@ -133,5 +133,10 @@ definition is_in_inactivity_leak :: "(bool, 'a) cont" where
     return (finality_delay > MIN_EPOCHS_TO_INACTIVITY_PENALTY config)
   }"
 
+definition is_eligible_for_activation_queue :: "Validator \<Rightarrow> bool" where
+  "is_eligible_for_activation_queue val \<equiv>
+    activation_eligibility_epoch_f val = FAR_FUTURE_EPOCH \<and>
+      effective_balance_f val = MAX_EFFECTIVE_BALANCE"
+
 end
 end

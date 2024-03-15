@@ -264,7 +264,6 @@ where
     return ()
   }}"
 
-
 definition sum_vector :: 
   "(64 word) Vector \<Rightarrow> (64 word, 'a) cont" where
 "sum_vector vs = foldrM word_unsigned_add (vector_inner vs) 0" 
@@ -295,7 +294,6 @@ definition process_slashings ::
   return ()
 }"
 
-
 definition process_effective_balance_updates :: 
   "(unit, 'a) cont" where
  "process_effective_balance_updates \<equiv> do {
@@ -317,6 +315,36 @@ definition process_effective_balance_updates ::
                    else  (return v)});
          (write_to validators (VariableList new_validators))}
  "
+
+(* TODO: this would mutate while iterating *)
+definition set_activation_eligibility_epoch :: "u64 \<Rightarrow> Epoch \<Rightarrow> (unit, 'a) cont" where
+  "set_activation_eligibility_epoch index epoch \<equiv> do {
+    vals \<leftarrow> read validators;
+    val \<leftarrow> var_list_index vals index;
+    let updated_val = val \<lparr>activation_eligibility_epoch_f := epoch\<rparr>;
+    updated_vals \<leftarrow> var_list_update updated_val vals index;
+    validators ::= updated_vals
+  }"
+
+(* TODO: hard to write this without mutating while iterating without substantially diverging from
+   the spec, as initiate_validator_exit does a whole bunch of reads & writes *)
+definition process_registry_updates ::
+  "(unit, 'a) cont"
+where
+  "process_registry_updates \<equiv> do {
+    vals \<leftarrow> read validators;
+    new_validators \<leftarrow> forM (enumerate (var_list_inner vals))
+      ((\<lambda>(index, val). do {
+        if is_eligible_for_activation_queue val then do {
+          current_epoch \<leftarrow> get_current_epoch;
+          undefined
+        } else do {
+          return undefined
+        }
+    }));
+    write_to validators (VariableList new_validators)
+  }"
+
 end
 
 end
