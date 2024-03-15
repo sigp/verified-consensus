@@ -140,8 +140,15 @@ definition word_unsigned_mod :: "('w :: len) word \<Rightarrow> 'w word \<Righta
      if y \<noteq> 0 then return (x mod y) else fail"
 
 
+definition epoch_unsigned_mod :: "Epoch \<Rightarrow> Epoch \<Rightarrow> (Epoch, 'a) cont" where
+  "epoch_unsigned_mod x y \<equiv> do {
+     result <- word_unsigned_mod (epoch_to_u64 x) (epoch_to_u64 y);
+     return (Epoch result)
+}"
+
+
 adhoc_overloading
-  unsigned_mod word_unsigned_mod
+  unsigned_mod word_unsigned_mod epoch_unsigned_mod
 
 lemma udiv_sanity: "run ((x :: u64) \\ 2) \<noteq> \<top>"
   by (clarsimp simp: word_unsigned_div_def run_def Let_unfold return_def)

@@ -25,21 +25,31 @@ definition var_list_update :: "'b \<Rightarrow> 'b VariableList \<Rightarrow> u6
     else
       fail"
 
+
+
 definition var_list_inner :: "'b VariableList \<Rightarrow> 'b list" where
   "var_list_inner l \<equiv> case l of VariableList inner \<Rightarrow> inner"
 
 definition unsafe_var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> 'b" where
   "unsafe_var_list_index l i \<equiv>  (var_list_inner l ! unat i) "
 
-definition vector_index :: "'b Vector \<Rightarrow> u64 \<Rightarrow> 'b option" where
+definition vector_index :: "'b Vector \<Rightarrow> u64 \<Rightarrow> ('b, 'a) cont" where
   "vector_index v i \<equiv>
     if i < vector_len v then
-      Some (vector_inner v ! u64_to_nat i)
+      return (vector_inner v ! u64_to_nat i)
     else
-      None"
+      fail"
+
+
+definition vector_update :: "'b \<Rightarrow> 'b Vector\<Rightarrow> u64 \<Rightarrow> ('b Vector, 'a) cont" where
+  "vector_update e l i \<equiv>
+    if i < vector_len l then
+      return ( Vector (list_update (vector_inner l) (u64_to_nat i) e))
+    else
+      fail"
 
 definition unsafe_vector_index :: "'b Vector \<Rightarrow> u64 \<Rightarrow> 'b" where
-  "unsafe_vector_index v i \<equiv> the (vector_index v i)"
+  "unsafe_vector_index v i \<equiv>  (vector_inner v ! (unat i))"
 
 definition shift_and_clear_bitvector :: "Config \<Rightarrow> Bitvector \<Rightarrow> Bitvector" where
   "shift_and_clear_bitvector c bv \<equiv>

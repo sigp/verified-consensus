@@ -50,8 +50,18 @@ consts
 consts 
   write_to :: "'a \<Rightarrow> 'b \<Rightarrow> (unit, 'c) cont" 
 
+consts
+  modify_s :: "'a \<Rightarrow> ('b \<Rightarrow> 'c) \<Rightarrow> (unit, 'd) cont"
+
+
 abbreviation modify :: "'a \<Rightarrow> ('b \<Rightarrow> 'b) \<Rightarrow> (unit, 'c) cont" where
    "modify a f \<equiv> (bindCont (read a) (\<lambda>x. write_to a (f x)))"
+
+abbreviation modifyM :: "'a \<Rightarrow> ('b \<Rightarrow> ('b, 'c) cont) \<Rightarrow> (unit, 'c) cont" where
+   "modifyM a f \<equiv> (bindCont (read a) (\<lambda>x. bindCont (f x) (write_to a)))"
+
+adhoc_overloading modify_s modify modifyM
+
 
 abbreviation 
   "when b p \<equiv> (if b then p else return ())" 
@@ -106,13 +116,18 @@ definition "next_sync_committee = Lens next_sync_committee_f  (\<lambda>a b. a\<
 
 syntax
   "_mod_expr" :: "'a \<Rightarrow> 'b \<Rightarrow> 'c " ("_ ::= _" [1000, 13] 13)
+  "_mod_exprM" :: "'a \<Rightarrow> 'b \<Rightarrow> 'c " ("_ := _" [1000, 13] 13)
+
 
 
 translations
- "_mod_expr a b" \<rightharpoonup> "CONST modify a (\<lambda>a. b)"
+ "_mod_expr a b"  \<rightharpoonup> "CONST modify a (\<lambda>a. b)"
+ "_mod_exprM a b" \<rightharpoonup> "CONST modifyM a (\<lambda>a. b)"
+
+
 
 definition foo where 
-   "foo x y \<equiv>  (x ::= y)"
+   "foo x y \<equiv>  (x ::=  (0 :: nat))"
 
 thm foo_def
 

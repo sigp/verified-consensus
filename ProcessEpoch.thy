@@ -317,6 +317,46 @@ definition process_effective_balance_updates ::
                    else  (return v)});
          (write_to validators (VariableList new_validators))}
  "
+
+definition process_eth1_data_reset :: 
+ "(unit, 'a) cont" where
+ "process_eth1_data_reset \<equiv> do {
+  epoch <- get_current_epoch;
+  next_epoch <- epoch_to_u64 epoch .+ ( 1);
+  x <- ( next_epoch) .% (EPOCHS_PER_ETH1_VOTING_PERIOD config);
+  when (x = 0) ( eth1_data_votes ::= (VariableList [])) 
+  }"
+
+term var_list_update
+
+definition process_slashings_reset ::
+ "(unit, 'a) cont" where
+ "process_slashings_reset = do {
+    epoch <- get_current_epoch;
+    next_epoch <- epoch_to_u64 epoch .+ ( 1);
+    x <- next_epoch .% EPOCHS_PER_SLASHINGS_VECTOR config;
+    (slashings := vector_update 0 slashings x)
+  }"
+
+
+
+definition get_randao_mix ::
+ "Epoch \<Rightarrow> (Hash256, 'a) cont"
+ where "get_randao_mix epoch \<equiv> do {
+  mixes <- read randao_mixes;
+  index <- (epoch_to_u64 epoch) .% EPOCHS_PER_HISTORICAL_VECTOR config;
+  vector_index mixes index
+ }"
+
+definition process_randao_mixes_reset ::
+"(unit, 'a) cont" where
+ "process_randao_mixes_reset = do {
+    epoch <- get_current_epoch;
+    next_epoch <- epoch_to_u64 epoch .+ ( 1);
+    x <- next_epoch .% EPOCHS_PER_HISTORICAL_VECTOR config;
+    randao_mix <- get_randao_mix epoch;
+   (randao_mixes := vector_update randao_mix randao_mixes x)
+}"
 end
 
 end
