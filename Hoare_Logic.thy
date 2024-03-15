@@ -7,7 +7,6 @@ begin
 
 declare [[show_sorts=false]]
 
-term "when"
 
 lemma map_insort_sorted: "mono f \<Longrightarrow> sorted xs \<Longrightarrow> map f (insort a xs) = insort (f a) (map f xs)" 
   apply (induct xs; clarsimp)
@@ -222,7 +221,6 @@ lemma setState_spec: "(run (setState s)) \<le> spec (UNIV \<triangleright> {s}) 
     apply (clarsimp simp: run_def setState_def)
   by (meson order_trans spec_ref_pgm spec_term)
 
-term eq
 
 lemma set_state_valid: "hoare_triple \<top> (setState s) (eq s)"
   apply (clarsimp simp: hoare_triple_def assert_top)
@@ -824,10 +822,7 @@ lemma add_wp[wp]: "hoare_triple (P (n + m)) (c (n + m)) Q \<Longrightarrow>
    apply (simp only: Let_unfold)
    apply (wp, clarsimp simp: bindCont_return')
   done
-    apply (atomize)
-    apply (erule_tac x="n + m" in allE, assumption, wp)
-  apply (clarsimp)
-  done
+
 
 
 lemma div_wp[wp]: "hoare_triple (P (n div m)) (c (n div m)) Q \<Longrightarrow>
@@ -841,7 +836,8 @@ lemma div_wp[wp]: "hoare_triple (P (n div m)) (c (n div m)) Q \<Longrightarrow>
 
 
 end
-end
+
+context hoare_logic begin
 (*
 
 
@@ -873,7 +869,7 @@ lemma lift_option_wp[wp]:
   apply (clarsimp)
   apply (clarsimp simp: bindCont_return')
   done
-
+*)
 lemma fold_increasing_when: "finite S \<Longrightarrow> (\<And>x y. f y x \<ge> x) \<Longrightarrow> comp_fun_commute_on (insert x S) f \<Longrightarrow> Finite_Set.fold f (\<bottom> :: 'e :: {order_bot}) (S) \<le> Finite_Set.fold f \<bottom> (insert x S)"
   apply (case_tac "x \<in> S"; clarsimp?)
   apply (simp add: insert_absorb)
@@ -901,7 +897,6 @@ lemma append_sorted_list_of_setD: "finite xs  \<Longrightarrow> a # x = sorted_l
   apply (induct xs rule: finite.induct; clarsimp)
   by (metis finite.insertI insert_not_empty list.inject 
             sorted_list_of_set.sorted_key_list_of_set_insert_remove sorted_list_of_set_nonempty)
-find_theorems sorted_list_of_set "(#)"
 
 lemma inj_image_sub: "inj f \<Longrightarrow> f ` (xs - {a}) = f ` xs - {f a}" 
   apply (safe; clarsimp)
@@ -915,8 +910,11 @@ lemma commutative_insort_foldr: "comp_fun_commute_on (list.set (a#xs)) f \<Longr
   apply (clarsimp)
   by (simp add: comp_fun_commute_on.fun_left_comm)
 
-lemma uadd_welldf: "u64_to_nat a + u64_to_nat b < 2^64 \<Longrightarrow> \<exists>v. a .+ b = Some v"
-  by (clarsimp simp: valid_u64_def any_args_def u64_add_def check_bin_op_def check_bin_op_then_def Let_unfold)
+
+lemma uadd_welldf: "u64_to_nat (a :: 64 word) + u64_to_nat b < 2^64 \<Longrightarrow> word_unsigned_add a  b = return (a + b)"
+  apply (clarsimp simp: word_unsigned_add_def Let_unfold)
+  apply (erule notE)
+  by (unat_arith, clarsimp)
 
 lemma foldr_is_fold: "finite S \<Longrightarrow> comp_fun_commute_on S f \<Longrightarrow> xs = sorted_list_of_set S \<Longrightarrow> 
   foldr f ( xs) z =  Finite_Set.fold f z S"
@@ -932,23 +930,29 @@ lemma foldr_is_fold: "finite S \<Longrightarrow> comp_fun_commute_on S f \<Longr
   by (subst commutative_insort_foldr, clarsimp, clarsimp)
 
 
-lemma u64_add_is_commutative: " comp_fun_commute_on xs (\<lambda>x acc. acc \<bind> u64_add x)"
+
+lemma u64_add_is_commutative: " comp_fun_commute_on xs (\<lambda>x acc. bindCont acc (word_unsigned_add x))"
   apply (clarsimp simp: comp_fun_commute_on_def, rule ext, clarsimp)
-  apply (case_tac xa; clarsimp)
-  by (clarsimp simp: Option.bind_def u64_add_def check_bin_op_def check_bin_op_then_def any_args_def Let_unfold valid_u64_def)
-sledgehammer 
+  apply (rule ext, clarsimp simp: bindCont_def)
+  apply (rule_tac f=xa in arg_cong)
+  apply (rule ext, clarsimp simp: word_unsigned_add_def Let_unfold return_def fail_def, safe)
+      apply (smt (verit, ccfv_SIG) add.left_commute le_no_overflow return_def)
+  using olen_add_eqv word_plus_mono_right2 apply blast
+  using olen_add_eqv word_random apply blast
+   apply (metis add.left_commute le_no_overflow)
+  by (simp add: add.left_commute le_no_overflow)
 
 lemma [simp]:"comp_fun_commute_on (S :: nat set) (+)"
   by (clarsimp simp: comp_fun_commute_on_def, rule ext, clarsimp)
 
-find_theorems insort
+(*
 lemma "mono f \<Longrightarrow> map f (insort a xs) = insort (f a) (map f xs)" 
   apply (induct xs; clarsimp)
   apply (safe)
   using monoD apply blast
   using monoD apply blast
    apply (simp add: monoD order_antisym)
-  
+*)
 
 lemma idk: "finite S \<Longrightarrow> xs = sorted_list_of_set S \<Longrightarrow> mono f \<Longrightarrow> inj f \<Longrightarrow>
   map f xs = sorted_list_of_set (f ` S)"
@@ -959,29 +963,38 @@ lemma idk: "finite S \<Longrightarrow> xs = sorted_list_of_set S \<Longrightarro
   apply (simp add: map_insort_sorted)
   by (simp add: inj_image_mem_iff)
 
-lemma foldr_safe_add_is_add: "(foldr (\<lambda>x acc. acc \<bind> (.+) x) x (Some (u64.u64 0))) = Some y \<Longrightarrow> 
-       foldr ((+) \<circ> u64_to_nat) x 0 = 
-       u64_to_nat (the (foldr (\<lambda>x acc. acc \<bind> (.+) x) x (Some (u64.u64 0))))"
-  apply (induct x arbitrary: y ; clarsimp)
+lemma foldr_safe_add_is_add: "(foldr (\<lambda>x acc. bindCont acc ((.+) x)) x (return (0 :: 64 word))) \<noteq> fail \<Longrightarrow> 
+       return (foldr ((+) \<circ> unat) x (0 :: nat)) = 
+       (do {x <- (foldr (\<lambda>x acc. bindCont acc ((.+) x)) x (return (0 :: 64 word))); return (unat x)})"
+  apply (induct x  ; clarsimp)
+   apply (simp add: bindCont_return')
+  apply (clarsimp simp: bindCont_return' bindCont_return word_unsigned_add_def)
+  apply (rule ext, clarsimp simp: return_def)
   apply (clarsimp simp: bind_eq_Some_conv)
   by (smt (verit, ccfv_SIG) bind_eq_Some_conv check_bin_op_def 
      check_bin_op_then_def option.distinct(1) option.inject u64_add_def u64_to_nat.simps)
 
-lemma safe_sum_boundedI: "finite xs \<Longrightarrow> (\<And>x. Finite_Set.fold (+) 0 (u64_to_nat ` xs) < 2 ^ 64) \<Longrightarrow> (\<exists>y. safe_sum xs = Some y)"
+lemma safe_sum_boundedI: "finite xs \<Longrightarrow> (\<And>x. Finite_Set.fold (+) 0 (unat ` xs) < 2 ^ 64) \<Longrightarrow> (\<exists>y. safe_sum xs = return y)"
+  sorry
   apply (clarsimp simp: safe_sum_def)
   apply (induct \<open>sorted_list_of_set xs\<close> arbitrary: xs)
    apply (clarsimp)
+   apply (rule_tac x=0 in exI)
+  apply (clarsimp simp: foldrM_def)
   apply (clarsimp)
   apply (atomize)
   apply (clarsimp)
   apply (erule_tac x="xs - {a}" in allE)
   apply (drule mp, clarsimp?)
-  apply (rule sym)
-   apply (erule (1) append_sorted_list_of_setD)
+   apply (rule sym)
+  thm append_sorted_list_of_setD
+   apply (erule  append_sorted_list_of_setD[rotated])
+  using finite_code apply blast
   apply (drule mp, clarsimp)
   apply (drule mp)
    apply (erule le_less_trans[rotated])
-  apply (subst inj_image_sub)
+   apply (subst inj_image_sub)
+  apply simp
     apply (meson injI u64_to_nat_bij)
    apply (rule fold_increasing_when')
      apply (clarsimp)
@@ -993,6 +1006,7 @@ lemma safe_sum_boundedI: "finite xs \<Longrightarrow> (\<And>x. Finite_Set.fold 
   apply (subgoal_tac "a \<in> xs")
   apply (clarsimp simp: append_sorted_list_of_setD)
    apply (rule subst, assumption)
+  apply (subst foldrM_def)
   apply (subst foldr_Cons)
    apply (clarsimp)
    apply (subst (asm) foldr_is_fold[symmetric], clarsimp, clarsimp)
@@ -1010,6 +1024,8 @@ lemma safe_sum_boundedI: "finite xs \<Longrightarrow> (\<And>x. Finite_Set.fold 
     apply (clarsimp)
    apply (rule foldr_safe_add_is_add, assumption)
   by (metis insertCI list.simps(15) sorted_list_of_set.set_sorted_key_list_of_set)
+end
+end
 
 definition get_current_epoch :: "(Epoch, 'a) cont" where
   "get_current_epoch \<equiv> do {
