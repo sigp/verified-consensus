@@ -466,6 +466,55 @@ where
     write_to validators ( vals)
   }"
 
+definition process_historical_summaries_update :: "(unit, 'a) cont" where
+  "process_historical_summaries_update \<equiv> do {
+    current_epoch \<leftarrow> get_current_epoch;
+    next_epoch \<leftarrow> current_epoch .+ Epoch 1;
+    modulus \<leftarrow> word_unsigned_div (SLOTS_PER_HISTORICAL_ROOT config) (SLOTS_PER_EPOCH config);
+    next_epoch_offset \<leftarrow> epoch_to_u64 next_epoch .% modulus;
+    when (next_epoch_offset = 0)
+      (do {
+        block_roots_list \<leftarrow> read block_roots;
+        state_roots_list \<leftarrow> read state_roots;
+        let historical_summary = \<lparr>
+          block_summary_root_f = hash_tree_root block_roots_list,
+          state_summary_root_f = hash_tree_root state_roots_list
+        \<rparr>;
+        old_historical_summaries \<leftarrow> read historical_summaries;
+        let new_historical_summaries = var_list_inner old_historical_summaries @ [historical_summary];
+        write_to historical_summaries (VariableList new_historical_summaries)
+      })
+  }"
+
+definition process_participation_flag_updates :: "(unit, 'a) cont" where
+  "process_participation_flag_updates \<equiv> do {
+    old_current_epoch_participation \<leftarrow> read current_epoch_participation;
+    _ \<leftarrow> write_to previous_epoch_participation old_current_epoch_participation;
+    vals \<leftarrow> read validators;
+    let num_validators = (length (var_list_inner vals));
+    let new_current_epoch_participation = List.replicate num_validators (ParticipationFlags [False, False, False]);
+    write_to current_epoch_participation (VariableList new_current_epoch_participation)
+  }"
+
+(* TODO: process_sync_committee_updates *)
+definition process_epoch :: "(unit, 'a) cont" where
+  "process_epoch \<equiv> do {
+    _ \<leftarrow> process_justification_and_finalization;
+    _ \<leftarrow> process_inactivity_updates;
+    _ \<leftarrow> process_rewards_and_penalties;
+    _ \<leftarrow> process_registry_updates;
+    _ \<leftarrow> process_slashings;
+    _ \<leftarrow> process_eth1_data_reset;
+    _ \<leftarrow> process_effective_balance_updates;
+    _ \<leftarrow> process_slashings_reset;
+    _ \<leftarrow> process_randao_mixes_reset;
+    _ \<leftarrow> process_historical_summaries_update;
+    _ \<leftarrow> process_participation_flag_updates;
+    return ()
+  }"
+
+
+
 end
 
 end

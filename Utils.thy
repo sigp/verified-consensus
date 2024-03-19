@@ -97,5 +97,10 @@ definition is_eligible_for_activation_queue :: "Validator \<Rightarrow> bool" wh
   "is_eligible_for_activation_queue val \<equiv>
     activation_eligibility_epoch_f val = FAR_FUTURE_EPOCH \<and>
       effective_balance_f val = MAX_EFFECTIVE_BALANCE"
+
+(* Opaque definition, we do not actually implement hashing *)
+definition hash_tree_root :: "'b \<Rightarrow> Hash256" where
+  "hash_tree_root x \<equiv> undefined"
+
 end
 end

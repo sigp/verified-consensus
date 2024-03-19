@@ -111,6 +111,8 @@ definition "state_roots = Lens state_roots_f  (\<lambda>a b. a\<lparr>state_root
 
 definition "historical_roots = Lens historical_roots_f  (\<lambda>a b. a\<lparr>historical_roots_f := b\<rparr> )"
 
+definition "historical_summaries = Lens historical_summaries_f (\<lambda>a b. a\<lparr>historical_summaries_f := b\<rparr>)"
+
 definition "eth1_data = Lens eth1_data_f  (\<lambda>a b. a\<lparr>eth1_data_f := b\<rparr> )"
 
 definition "eth1_data_votes = Lens eth1_data_votes_f  (\<lambda>a b. a\<lparr>eth1_data_votes_f := b\<rparr> )"
