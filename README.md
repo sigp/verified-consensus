@@ -16,8 +16,7 @@ researchers, and mirrors the spec by implementing the algorithm in Python.
 We are now in the process of formalising the proofs in Isabelle/HOL:
 
 - [`algebra`](./algebra): Separation logic algebra which is the base layer for the proofs.
-- [`ProcessEpoch.thy`](./ProcessEpoch.thy): Draft of the spec in the `option` monad,
-  awaiting completion in the separation logic style.
+- [`ProcessEpoch.thy`](./ProcessEpoch.thy): Translation of the Python spec to our continuation monad.
 
 ## Call DB
 
