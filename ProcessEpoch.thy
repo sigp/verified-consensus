@@ -466,6 +466,45 @@ where
     write_to validators ( vals)
   }"
 
+(* TODO: almost complete *)
+definition process_historical_summaries_update :: "(unit, 'a) cont" where
+  "process_historical_summaries_update \<equiv> do {
+    current_epoch \<leftarrow> get_current_epoch;
+    next_epoch \<leftarrow> current_epoch .+ Epoch 1;
+    modulus \<leftarrow> word_unsigned_div (SLOTS_PER_HISTORICAL_ROOT config) (SLOTS_PER_EPOCH config);
+    next_epoch_offset \<leftarrow> epoch_to_u64 next_epoch .% modulus;
+    _ \<leftarrow> when (next_epoch_offset = 0)
+      (do {
+        block_roots_list \<leftarrow> read block_roots;
+        state_roots_list \<leftarrow> read state_roots;
+        let historical_summary = \<lparr>
+          block_summary_root_f = hash_tree_root block_roots_list,
+          state_summary_root_f = hash_tree_root state_roots_list
+        \<rparr>;
+        historical_summaries \<leftarrow> read historical_summaries;
+        
+        return ()
+      });
+    return ()
+  }"
+
+definition process_epoch :: "(unit, 'a) cont" where
+  "process_epoch \<equiv> do {
+    _ \<leftarrow> process_justification_and_finalization;
+    _ \<leftarrow> process_inactivity_updates;
+    _ \<leftarrow> process_rewards_and_penalties;
+    _ \<leftarrow> process_registry_updates;
+    _ \<leftarrow> process_slashings;
+    _ \<leftarrow> process_eth1_data_reset;
+    _ \<leftarrow> process_effective_balance_updates;
+    _ \<leftarrow> process_slashings_reset;
+    _ \<leftarrow> process_randao_mixes_reset;
+    _ \<leftarrow> process_historical_summaries_update;
+    _ \<leftarrow> process_participation_flag_updates;
+    _ \<leftarrow> process_sync_committee_updates;
+    return ()
+  }"
+
 end
 
 end
