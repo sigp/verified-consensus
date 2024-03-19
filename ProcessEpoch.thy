@@ -282,12 +282,18 @@ definition process_slashings ::
   return ()
 }"
 
+definition update_validator :: "Validator \<Rightarrow> u64 \<Rightarrow> (unit, 'a) cont"
+  where "update_validator val index \<equiv> do {
+   vs \<leftarrow> read validators;
+   vs \<leftarrow> var_list_update val vs index;
+   write_to validators vs
+}"
 
 definition process_effective_balance_updates :: 
   "(unit, 'a) cont" where
  "process_effective_balance_updates \<equiv> do {
        vs <- read validators;
-       new_validators <- forM (enumerate (var_list_inner vs))
+       _ <- forM (enumerate (var_list_inner vs))
             (\<lambda>(index, v). do {
                balances <- read balances;
                balance <- var_list_index balances index;
@@ -297,13 +303,13 @@ definition process_effective_balance_updates ::
                lower <- balance .+ downward_threshold;
                let effective_balance = effective_balance_f v;
                upper <- effective_balance .+ upward_threshold;
-               if (lower < effective_balance \<or> upper < balance)
-                   then (do { b <- word_unsigned_mod balance (EFFECTIVE_BALANCE_INCREMENT config);
+               v \<leftarrow> if (lower < effective_balance \<or> upper < balance)
+                      then (do { b <- word_unsigned_mod balance (EFFECTIVE_BALANCE_INCREMENT config);
                           b' <- balance .- b;
                           return (v\<lparr>effective_balance_f := min b' (MAX_EFFECTIVE_BALANCE)\<rparr>)})
-                   else  (return v)});
-         (write_to validators (VariableList new_validators))}
- "
+                       else (return v);
+               update_validator v index});
+         return ()}"
 
 definition process_eth1_data_reset :: 
  "(unit, 'a) cont" where
@@ -368,7 +374,6 @@ definition initiate_validator_exit :: "u64 \<Rightarrow> (unit, 'a) cont"
     val <- var_list_index vs index;
     _ \<leftarrow> when (exit_epoch_f val = FAR_FUTURE_EPOCH)
       (do {
-       
        let exit_epochs = map exit_epoch_f (filter (\<lambda>v. exit_epoch_f v \<noteq> FAR_FUTURE_EPOCH) (var_list_inner vs));
        current_epoch <- get_current_epoch;
        activation_exit_epoch \<leftarrow> compute_activation_exit_epoch current_epoch;
@@ -390,12 +395,6 @@ definition is_active_validator :: "Validator \<Rightarrow> Epoch \<Rightarrow> b
   where "is_active_validator validator epoch \<equiv>
            activation_epoch_f validator \<le> epoch \<and> epoch < exit_epoch_f validator"
 
-definition update_validator :: "Validator \<Rightarrow> u64 \<Rightarrow> (unit, 'a) cont"
-  where "update_validator val index \<equiv> do {
-   vs \<leftarrow> read validators;
-   vs \<leftarrow> var_list_update val vs index;
-   write_to validators vs
-}"
 
 definition is_eligible_for_activation :: "Validator \<Rightarrow> (bool, 'a) cont"
   where "is_eligible_for_activation validator \<equiv> do {
