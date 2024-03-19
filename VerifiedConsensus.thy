@@ -2,6 +2,35 @@
 theory VerifiedConsensus
   imports Cont_Monad_Algebra Types Config "Word_Lib.Word_64" "Word_Lib.More_Arithmetic"
 begin
+        
+term the
+
+datatype ('a, 'b) Lex_Prod = Prod (major :'a) (minor : 'b) 
+
+instantiation Lex_Prod :: (preorder, preorder) preorder
+begin
+
+  fun less_eq_Lex_Prod :: "('a, 'b) Lex_Prod \<Rightarrow> ('a, 'b) Lex_Prod \<Rightarrow> bool"
+    where "less_eq_Lex_Prod (Prod a1 b1) (Prod a2 b2) = ((a1 \<le> a2) \<and> ((a2 \<le> a1) \<longrightarrow> b1 \<le> b2))"
+
+  definition less_Lex_Prod :: "('a, 'b) Lex_Prod \<Rightarrow> ('a, 'b) Lex_Prod \<Rightarrow> bool"
+    where "less_Lex_Prod a b \<equiv> less_eq a b \<and> \<not>(less_eq b a)"
+
+instance 
+  apply (standard)
+    apply (clarsimp simp: less_Lex_Prod_def)
+   apply (case_tac x;  clarsimp)
+  apply (case_tac x; case_tac y; case_tac z;  clarsimp)
+  by (metis order_trans)
+  
+end
+
+instantiation Lex_Prod :: (order, order) order
+begin
+instance
+  apply (standard)
+  by (case_tac x; case_tac y; clarsimp)
+end
 
 type_synonym ('var, 'val) heap = "'var \<Rightarrow> 'val option"
 

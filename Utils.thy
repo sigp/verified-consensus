@@ -91,5 +91,11 @@ definition integer_squareroot :: "u64 \<Rightarrow> (u64, 'a) cont" where
     (x', _) \<leftarrow> integer_squareroot_aux x y n;
     return x'
   }" 
+
+
+definition is_eligible_for_activation_queue :: "Validator \<Rightarrow> bool" where
+  "is_eligible_for_activation_queue val \<equiv>
+    activation_eligibility_epoch_f val = FAR_FUTURE_EPOCH \<and>
+      effective_balance_f val = MAX_EFFECTIVE_BALANCE"
 end
 end

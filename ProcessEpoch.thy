@@ -357,6 +357,184 @@ definition process_randao_mixes_reset ::
     randao_mix <- get_randao_mix epoch;
    (randao_mixes := vector_update randao_mix randao_mixes x)
 }"
+
+
+(* TODO: this would mutate while iterating *)
+definition set_activation_eligibility_epoch :: "u64 \<Rightarrow> Epoch \<Rightarrow> (unit, 'a) cont" where
+  "set_activation_eligibility_epoch index epoch \<equiv> do {
+    vals \<leftarrow> read validators;
+    val  \<leftarrow> var_list_index vals index;
+    let updated_val = val \<lparr>activation_eligibility_epoch_f := epoch\<rparr>;
+    updated_vals \<leftarrow> var_list_update updated_val vals index;
+    validators ::= updated_vals
+  }"
+
+primrec maximum where
+ "maximum c (x#xs) = (if c \<ge> x then maximum c xs else maximum x xs)" |
+ "maximum c [] = c"
+
+
+definition compute_activation_exit_epoch :: " Epoch \<Rightarrow> (Epoch, 'a) cont"
+  where "compute_activation_exit_epoch epoch \<equiv> do {
+  x \<leftarrow> epoch .+ (Epoch 1);
+  x \<leftarrow> x .+ MAX_SEED_LOOKAHEAD;
+  return x  
+}"
+
+find_consts "nat \<Rightarrow> 64 word"
+
+definition get_validator_churn_limit :: "(u64, 'a) cont"
+  where "get_validator_churn_limit = do {
+         current_epoch \<leftarrow> get_current_epoch;
+         active_validator_indices \<leftarrow> get_active_validator_indices(current_epoch);
+         x \<leftarrow> word_unsigned_div ( nat_to_u64 (length (active_validator_indices)))
+          (CHURN_LIMIT_QUOTIENT config);
+         return (max (MIN_PER_EPOCH_CHURN_LIMIT config) x)
+}"
+
+
+term "(do {
+       let exit_epochs = map exit_epoch_f (filter (\<lambda>v. exit_epoch_f v \<noteq> FAR_FUTURE_EPOCH) (var_list_inner vs));
+       activation_exit_epoch \<leftarrow> compute_activation_exit_epoch current_epoch;
+       let exit_queue_epoch = maximum activation_exit_epoch exit_epochs;
+
+       churn_limit <- get_validator_churn_limit;
+       exit_queue_epoch \<leftarrow> (if (exit_queue_churn \<ge> churn_limit) then return exit_queue_epoch 
+                                                                 else exit_queue_epoch .+ Epoch 1);
+       let val = val\<lparr>exit_epoch_f :=  exit_queue_epoch\<rparr>;
+       new_withdrawable_epoch \<leftarrow> epoch_to_u64 (exit_epoch_f val) .+ MIN_VALIDATOR_WITHDRAWABILITY_DELAY config;
+       let val = val\<lparr>withdrawable_epoch_f := Epoch (new_withdrawable_epoch) \<rparr>;
+       let vs = var_list_update val vs index;
+       return ()
+    })"
+
+
+definition initiate_validator_exit :: "u64 \<Rightarrow> (unit, 'a) cont" 
+  where "initiate_validator_exit index \<equiv> do {
+    vs <- read validators;
+    val <- var_list_index vs index;
+    _ \<leftarrow> when (exit_epoch_f val = FAR_FUTURE_EPOCH)
+      (do {
+       
+       let exit_epochs = map exit_epoch_f (filter (\<lambda>v. exit_epoch_f v \<noteq> FAR_FUTURE_EPOCH) (var_list_inner vs));
+       current_epoch <- get_current_epoch;
+       activation_exit_epoch \<leftarrow> compute_activation_exit_epoch current_epoch;
+       let exit_queue_epoch = maximum activation_exit_epoch exit_epochs;
+       let exit_queue_churn = length (filter (\<lambda>v. exit_epoch_f v = exit_queue_epoch) (var_list_inner vs));
+       churn_limit <- get_validator_churn_limit;
+       exit_queue_epoch \<leftarrow> (if (nat_to_u64 exit_queue_churn \<ge> churn_limit) then return exit_queue_epoch 
+                                                                 else exit_queue_epoch .+ Epoch 1);
+       let val = val\<lparr>exit_epoch_f :=  exit_queue_epoch\<rparr>;
+       new_withdrawable_epoch \<leftarrow> epoch_to_u64 (exit_epoch_f val) .+ MIN_VALIDATOR_WITHDRAWABILITY_DELAY config;
+       let val = val\<lparr>withdrawable_epoch_f := Epoch (new_withdrawable_epoch) \<rparr>;
+       let vs = var_list_update val vs index;
+       return ()
+    });
+    return ()}"
+
+
+(*    """
+    Initiate the exit of the validator with index ``index``.
+    """
+    # Return if validator already initiated exit
+    validator = state.validators[index]
+    if validator.exit_epoch != FAR_FUTURE_EPOCH:
+        return
+
+    # Compute exit queue epoch
+    exit_epochs = [v.exit_epoch for v in state.validators if v.exit_epoch != FAR_FUTURE_EPOCH]
+    exit_queue_epoch = max(exit_epochs + [compute_activation_exit_epoch(get_current_epoch(state))])
+    exit_queue_churn = len([v for v in state.validators if v.exit_epoch == exit_queue_epoch])
+    if exit_queue_churn >= get_validator_churn_limit(state):
+        exit_queue_epoch += Epoch(1)
+
+    # Set validator exit epoch and withdrawable epoch
+    validator.exit_epoch = exit_queue_epoch
+    validator.withdrawable_epoch = Epoch(validator.exit_epoch + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY)
+*)
+
+
+definition is_active_validator :: "Validator \<Rightarrow> Epoch \<Rightarrow> bool"
+  where "is_active_validator validator epoch \<equiv>
+           activation_epoch_f validator \<le> epoch \<and> epoch < exit_epoch_f validator"
+
+definition update_validator :: "Validator \<Rightarrow> u64 \<Rightarrow> (unit, 'a) cont"
+  where "update_validator val index \<equiv> do {
+   vs \<leftarrow> read validators;
+   vs \<leftarrow> var_list_update val vs index;
+   write_to validators vs
+}"
+
+
+
+definition is_eligible_for_activation :: "Validator \<Rightarrow> (bool, 'a) cont"
+  where "is_eligible_for_activation validator \<equiv> do {
+         final \<leftarrow> read finalized_checkpoint;
+         return (activation_eligibility_epoch_f validator \<le> epoch_f final \<and>
+                 activation_epoch_f validator = FAR_FUTURE_EPOCH) 
+}"
+
+
+primrec filterM :: "('b \<Rightarrow> (bool, 'r) cont) \<Rightarrow> 'b list \<Rightarrow> ('b list, 'r) cont" where
+  "filterM f (x#xs) = bindCont (f x) (\<lambda>b. do { xs <- filterM f xs; (if b then return (x # xs) else return xs)}) " |
+  "filterM f [] = return []"
+
+fun sortedByM :: "('b \<Rightarrow> 'b \<Rightarrow> (bool, 'a) cont) \<Rightarrow> 'b list \<Rightarrow> (bool, 'a) cont" where
+  "sortedByM f (x#y#xs) = do {b <- f x y; b' <- sortedByM f (y#xs); return (b \<and> b')}" |
+  "sortedByM f ([x]) = return True" |
+  "sortedByM f ([]) = return True"
+
+
+definition sortBy :: "('b \<Rightarrow> 'b \<Rightarrow> (bool, 'a) cont) \<Rightarrow> 'b list \<Rightarrow> ('b list, 'a) cont" where
+  "sortBy P xs \<equiv> do {
+    ys \<leftarrow> select {ys. List.set ys = List.set xs};
+    sorted \<leftarrow> sortedByM P ys;
+    if sorted then return ys else todo
+}"
+
+abbreviation (input) lex_ord where
+  "lex_ord x y \<equiv> fst x \<le> fst y \<and> (fst y \<le> fst x \<longrightarrow> snd x \<le> snd y)"
+
+(* TODO: hard to write this without mutating while iterating without substantially diverging from
+   the spec, as initiate_validator_exit does a whole bunch of reads & writes *)
+definition process_registry_updates ::
+  "(unit, 'a) cont"
+where
+  "process_registry_updates \<equiv> do {
+    vals \<leftarrow> read validators;
+    _ \<leftarrow> forM (enumerate (var_list_inner vals))
+      ((\<lambda>(index, val). do {
+        current_epoch \<leftarrow> get_current_epoch;
+        val \<leftarrow> (if is_eligible_for_activation_queue val then do {
+                      x \<leftarrow> current_epoch .+ Epoch 1;
+                      return (val\<lparr>activation_eligibility_epoch_f := x\<rparr>)}
+                 else return val);
+        _ \<leftarrow> update_validator val index;           
+        _ \<leftarrow> when (is_active_validator val current_epoch \<and>
+                effective_balance_f val \<le> EJECTION_BALANCE config) 
+               (initiate_validator_exit index);
+          return ()
+    }));
+    vals \<leftarrow> read validators;
+    potential_activation_queue \<leftarrow> filterM (\<lambda>(index,val). is_eligible_for_activation val) 
+                                           (enumerate (var_list_inner vals));
+    let activation_queue = map fst potential_activation_queue;  
+    activation_queue \<leftarrow> sortBy (\<lambda>index index'. do {
+                                vals \<leftarrow> read validators;
+                                val  \<leftarrow> var_list_index vals index;
+                                val' \<leftarrow> var_list_index vals index';
+                                let epoch  = activation_eligibility_epoch_f val;
+                                let epoch' = activation_eligibility_epoch_f val';   
+                                return (lex_ord ( epoch, index)  ( epoch', index'))}) activation_queue;
+    _ \<leftarrow> forM activation_queue (\<lambda>index. do {
+       vals \<leftarrow> read validators;
+       val  \<leftarrow> var_list_index vals index;
+       current_epoch \<leftarrow> get_current_epoch;
+       active_epoch \<leftarrow> compute_activation_exit_epoch current_epoch;
+       update_validator (val\<lparr>activation_epoch_f := active_epoch\<rparr>) index 
+       });
+    write_to validators ( vals)
+  }"
 end
 
 end
