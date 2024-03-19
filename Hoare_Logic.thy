@@ -1,5 +1,5 @@
 theory Hoare_Logic
-  imports Translation_Test "algebra/rg-algebra/AbstractAtomicTest/Programming_Constructs" 
+  imports ProcessEpoch "algebra/rg-algebra/AbstractAtomicTest/Programming_Constructs" 
   "jormungand/sep_algebra/Sep_Tactics"
   Word_Lib.More_Divides Word_Lib.Word_EqI
 Word_Lib.Word_64 Word_Lib.Bitwise Word_Lib.Word_Lemmas
