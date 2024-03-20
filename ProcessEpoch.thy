@@ -485,6 +485,76 @@ definition process_historical_summaries_update :: "(unit, 'a) cont" where
       })
   }"
 
+definition "get_validator index= do {
+  vals \<leftarrow> read validators;
+  var_list_index vals index
+}"
+
+definition eth_aggregate_pubkeys :: "PublicKey list \<Rightarrow> (PublicKey, 'a) cont"
+  where
+  "eth_aggregate_pubkeys pubkeys = undefined"
+
+(* Verifying the random selection works correctly is well out of scope of the project, so we just take 
+   a non-deterministic selection over all possible results *)
+definition get_next_sync_committee_indices :: "(u64 list, 'a) cont" where
+ "get_next_sync_committee_indices \<equiv> do {
+   current_epoch <- get_current_epoch;
+   epoch \<leftarrow> current_epoch .+ Epoch 1;
+   active_validator_indices \<leftarrow> get_active_validator_indices epoch;
+   sync_committee_indices \<leftarrow> select {xs. List.set xs \<subseteq> List.set active_validator_indices \<and>
+                                         length xs = unat (SYNC_COMMITTEE_SIZE config)};
+   return sync_committee_indices}
+"
+  (*  
+
+
+     (state: BeaconState) -> Sequence[ValidatorIndex]:
+    """
+    Return the sync committee indices, with possible duplicates, for the next sync committee.
+    """
+    epoch = Epoch(get_current_epoch(state) + 1)
+
+    MAX_RANDOM_BYTE = 2**8 - 1
+    active_validator_indices = get_active_validator_indices(state, epoch)
+    active_validator_count = uint64(len(active_validator_indices))
+    seed = get_seed(state, epoch, DOMAIN_SYNC_COMMITTEE)
+    i = 0
+    sync_committee_indices: List[ValidatorIndex] = []
+    while len(sync_committee_indices) < SYNC_COMMITTEE_SIZE:
+        shuffled_index = compute_shuffled_index(uint64(i % active_validator_count), active_validator_count, seed)
+        candidate_index = active_validator_indices[shuffled_index]
+        random_byte = hash(seed + uint_to_bytes(uint64(i // 32)))[i % 32]
+        effective_balance = state.validators[candidate_index].effective_balance
+        if effective_balance * MAX_RANDOM_BYTE >= MAX_EFFECTIVE_BALANCE * random_byte:
+            sync_committee_indices.append(candidate_index)
+        i += 1
+    return sync_committee_indices
+*)
+definition get_next_sync_committee :: "(SyncCommittee, 'a) cont"
+  where "get_next_sync_committee = do {
+    indices \<leftarrow> get_next_sync_committee_indices;
+    validators \<leftarrow> mapM get_validator indices;
+    let pubkeys = map pubkey_f validators;
+    aggregate_pubkey \<leftarrow> eth_aggregate_pubkeys pubkeys;
+    return (SyncCommittee.make (Vector pubkeys) aggregate_pubkey )
+}"
+    
+
+
+
+definition process_sync_committee_updates :: "(unit, 'a) cont" 
+  where "process_sync_committee_updates \<equiv> do {
+     current_epoch \<leftarrow> get_current_epoch;
+     next_epoch    \<leftarrow> current_epoch .+ Epoch 1;
+     x             \<leftarrow> epoch_to_u64 next_epoch .% EPOCHS_PER_SYNC_COMMITTEE_PERIOD;
+     when (x = 0) (do {
+        current_next_sync_committee \<leftarrow> read next_sync_committee;
+        _ \<leftarrow> write_to current_sync_committee current_next_sync_committee;
+        new_next_sync_committee \<leftarrow> get_next_sync_committee;
+        write_to next_sync_committee new_next_sync_committee
+   })
+}"
+
 definition process_participation_flag_updates :: "(unit, 'a) cont" where
   "process_participation_flag_updates \<equiv> do {
     old_current_epoch_participation \<leftarrow> read current_epoch_participation;
