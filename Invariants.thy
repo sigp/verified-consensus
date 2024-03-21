@@ -41,13 +41,13 @@ definition valid_fork :: "Fork \<Rightarrow> bool" where
 definition valid_beacon_block_header :: "BeaconBlockHeader \<Rightarrow> bool" where
   "valid_beacon_block_header header \<equiv>
     valid_hash256 (parent_root_f header) \<and>
-    valid_hash256 (state_root_f header) \<and>
+    valid_hash256 (BeaconBlockHeader.state_root_f header) \<and>
     valid_hash256 (body_root_f header)"
 
 definition valid_eth1_data :: "Eth1Data \<Rightarrow> bool" where
   "valid_eth1_data data \<equiv>
     valid_hash256 (deposit_root_f data) \<and>
-    valid_hash256 (block_hash_f data)"
+    valid_hash256 (Eth1Data.block_hash_f data)"
 
 definition valid_validator :: "Validator \<Rightarrow> bool" where
   "valid_validator v \<equiv>

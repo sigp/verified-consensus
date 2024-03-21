@@ -485,7 +485,7 @@ definition process_historical_summaries_update :: "(unit, 'a) cont" where
       })
   }"
 
-definition "get_validator index= do {
+definition "get_validator index = do {
   vals \<leftarrow> read validators;
   var_list_index vals index
 }"
@@ -505,31 +505,7 @@ definition get_next_sync_committee_indices :: "(u64 list, 'a) cont" where
                                          length xs = unat (SYNC_COMMITTEE_SIZE config)};
    return sync_committee_indices}
 "
-  (*  
 
-
-     (state: BeaconState) -> Sequence[ValidatorIndex]:
-    """
-    Return the sync committee indices, with possible duplicates, for the next sync committee.
-    """
-    epoch = Epoch(get_current_epoch(state) + 1)
-
-    MAX_RANDOM_BYTE = 2**8 - 1
-    active_validator_indices = get_active_validator_indices(state, epoch)
-    active_validator_count = uint64(len(active_validator_indices))
-    seed = get_seed(state, epoch, DOMAIN_SYNC_COMMITTEE)
-    i = 0
-    sync_committee_indices: List[ValidatorIndex] = []
-    while len(sync_committee_indices) < SYNC_COMMITTEE_SIZE:
-        shuffled_index = compute_shuffled_index(uint64(i % active_validator_count), active_validator_count, seed)
-        candidate_index = active_validator_indices[shuffled_index]
-        random_byte = hash(seed + uint_to_bytes(uint64(i // 32)))[i % 32]
-        effective_balance = state.validators[candidate_index].effective_balance
-        if effective_balance * MAX_RANDOM_BYTE >= MAX_EFFECTIVE_BALANCE * random_byte:
-            sync_committee_indices.append(candidate_index)
-        i += 1
-    return sync_committee_indices
-*)
 definition get_next_sync_committee :: "(SyncCommittee, 'a) cont"
   where "get_next_sync_committee = do {
     indices \<leftarrow> get_next_sync_committee_indices;
@@ -538,9 +514,6 @@ definition get_next_sync_committee :: "(SyncCommittee, 'a) cont"
     aggregate_pubkey \<leftarrow> eth_aggregate_pubkeys pubkeys;
     return (SyncCommittee.make (Vector pubkeys) aggregate_pubkey )
 }"
-    
-
-
 
 definition process_sync_committee_updates :: "(unit, 'a) cont" 
   where "process_sync_committee_updates \<equiv> do {
@@ -565,7 +538,6 @@ definition process_participation_flag_updates :: "(unit, 'a) cont" where
     write_to current_epoch_participation (VariableList new_current_epoch_participation)
   }"
 
-(* TODO: process_sync_committee_updates *)
 definition process_epoch :: "(unit, 'a) cont" where
   "process_epoch \<equiv> do {
     _ \<leftarrow> process_justification_and_finalization;
@@ -579,10 +551,9 @@ definition process_epoch :: "(unit, 'a) cont" where
     _ \<leftarrow> process_randao_mixes_reset;
     _ \<leftarrow> process_historical_summaries_update;
     _ \<leftarrow> process_participation_flag_updates;
+    _ \<leftarrow> process_sync_committee_updates;
     return ()
   }"
-
-
 
 end
 
