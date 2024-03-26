@@ -3,7 +3,7 @@ theory VerifiedConsensus
   imports Cont_Monad_Algebra Types Config "Word_Lib.Word_64" "Word_Lib.More_Arithmetic"
 begin
         
-term the
+term "(!)"
 
 datatype ('a, 'b) Lex_Prod = Prod (major :'a) (minor : 'b) 
 
@@ -36,17 +36,19 @@ type_synonym ('var, 'val) heap = "'var \<Rightarrow> 'val option"
 
 datatype ('a, 'b) lens = Lens (get : "'a \<Rightarrow> 'b") (set: "'a \<Rightarrow> 'b \<Rightarrow> 'a")
 
-datatype heap_value = list "heap_value list" | u8 u8 | u64 u64
+datatype ('var) heap_value = list "'var heap_value list" | u8 u8 | u64 u64 | ptr "'var"
 
 primrec is_list where
   "is_list (list _) = True"|
   "is_list (u8 _) = False" |
-  "is_list (u64 _) = False"
+  "is_list (u64 _) = False"|
+  "is_list (ptr _) = False"
 
 primrec list_of where
   "list_of (list xs) = Some xs"|
   "list_of (u8 _)    = None" |
-  "list_of (u64 _)   = None"
+  "list_of (u64 _)   = None" |
+  "list_of (ptr _)   = None"
 
 
 primrec is_u8 where
@@ -73,8 +75,19 @@ primrec u64_of where
   "u64_of (u8 _)   = None" |
   "u64_of (u64 x)  = Some x"
 
+
+primrec ptr_of where
+  "ptr_of (list _) = None"|
+  "ptr_of (u8 _)   = None" |
+  "ptr_of (u64 _)  = None" |
+  "ptr_of (ptr x)  = Some x"
+
+
 consts
   read :: "'a \<Rightarrow> ('b, 'c) cont"
+
+consts
+  index_s :: "'a \<Rightarrow> 'b \<Rightarrow> ('c, 'd) cont" (infixl "#!" 54)
 
 consts 
   write_to :: "'a \<Rightarrow> 'b \<Rightarrow> (unit, 'c) cont" 
@@ -155,17 +168,14 @@ translations
  "_mod_expr a b"  \<rightharpoonup> "CONST modify a (\<lambda>a. b)"
  "_mod_exprM a b" \<rightharpoonup> "CONST modifyM a (\<lambda>a. b)"
 
-
-
 definition foo where 
    "foo x y \<equiv>  (x ::=  (0 :: nat))"
 
-thm foo_def
 
 locale verified_con = constrained_atomic +
-  constrains pgm  :: "(BeaconState \<times> ('var, heap_value) heap) rel \<Rightarrow> 'a"
-  constrains env  :: "(BeaconState \<times> ('var, heap_value) heap) rel \<Rightarrow> 'a"
-  constrains test :: "(BeaconState \<times> ('var, heap_value) heap) set \<Rightarrow> 'a"
+  constrains pgm  :: "(BeaconState \<times> ('var, 'var heap_value) heap) rel \<Rightarrow> 'a"
+  constrains env  :: "(BeaconState \<times> ('var, 'var heap_value) heap) rel \<Rightarrow> 'a"
+  constrains test :: "(BeaconState \<times> ('var, 'var heap_value) heap) set \<Rightarrow> 'a"
   fixes config :: "Config"
 
 begin
@@ -185,7 +195,7 @@ definition write_beacon :: "((BeaconState, 'b option) lens) \<Rightarrow> 'b \<R
 
 definition "lift_option v = (if v = None then fail else return (the v))"
 
-definition read_list :: "'var \<Rightarrow> (heap_value list, 'a) cont" where
+definition read_list :: "'var \<Rightarrow> ('var heap_value list, 'a) cont" where
   "read_list p \<equiv> do {state <- getState; 
                      lift_option (do {v <- (snd state p); list_of v})}"
 
@@ -199,8 +209,20 @@ definition read_u64 :: "'var \<Rightarrow> (64 word, 'a) cont" where
                      x <- lift_option (do {v <- (snd state p); u64_of v});
                      return x}"
 
+definition index_u64_from_list :: "'var heap_value list \<Rightarrow> u64 =>  (u64, 'a) cont" where
+  "index_u64_from_list  ls index \<equiv> (if unat index \<ge> length ls 
+            then fail else lift_option (u64_of (ls ! unat index)))  "
 
-definition write_list :: "'var \<Rightarrow> heap_value list \<Rightarrow> (unit, 'a) cont" where
+
+definition index_ptr_from_list :: "'var heap_value list \<Rightarrow> u64 =>  ('var, 'a) cont" where
+  "index_ptr_from_list  ls index \<equiv> (if unat index \<ge> length ls 
+            then fail else lift_option (ptr_of (ls ! unat index)))  "
+
+definition index_u8_from_list :: "'var heap_value list \<Rightarrow> u8 \<Rightarrow>  (u8, 'a) cont" where
+  "index_u8_from_list ls index \<equiv> (if unat index \<ge> length ls 
+            then fail else lift_option (u8_of (ls ! unat index)))"
+
+definition write_list :: "'var \<Rightarrow> 'var heap_value list \<Rightarrow> (unit, 'a) cont" where
   "write_list p x \<equiv> do {state <- getState;
                           _ <- lift_option (do {v <- (snd state p); if (is_list v) then Some True else None});
                          setState ((fst state), fun_upd (snd state) p (Some (list x)))}"
@@ -220,6 +242,8 @@ definition write_u64 :: "'var \<Rightarrow> 64 word \<Rightarrow> (unit, 'a) con
 adhoc_overloading
   read read_beacon read_list read_u64 read_u8
 
+adhoc_overloading
+ index_s index_u8_from_list index_u64_from_list index_ptr_from_list
 
 adhoc_overloading
   write_to write_beacon write_list write_u8 write_u64

@@ -137,7 +137,11 @@ definition sep_disj_BeaconState_ext :: "'a BeaconState_scheme \<Rightarrow> 'a B
   finalized_checkpoint_f x ## finalized_checkpoint_f y \<and>
   inactivity_scores_f x ## inactivity_scores_f y \<and>
   current_sync_committee_f x ## current_sync_committee_f y \<and>
-  next_sync_committee_f x ## next_sync_committee_f y \<and> BeaconState.more x ## BeaconState.more y"
+  next_sync_committee_f x ## next_sync_committee_f y \<and> 
+  latest_execution_payload_header x ## latest_execution_payload_header y \<and> 
+  next_withdrawal_index_f x ## next_withdrawal_index_f y \<and> 
+  next_withdrawal_validator_index_f x ## next_withdrawal_validator_index_f y \<and>
+  historical_summaries_f x ## historical_summaries_f y \<and> BeaconState.more x ## BeaconState.more y"
 
 definition plus_BeaconState_ext :: "'a BeaconState_scheme \<Rightarrow> 'a BeaconState_scheme \<Rightarrow> 'a BeaconState_scheme" 
   where "plus_BeaconState_ext x y == 
@@ -163,7 +167,12 @@ definition plus_BeaconState_ext :: "'a BeaconState_scheme \<Rightarrow> 'a Beaco
   finalized_checkpoint_f = finalized_checkpoint_f x + finalized_checkpoint_f y,
   inactivity_scores_f = inactivity_scores_f x + inactivity_scores_f y,
   current_sync_committee_f = current_sync_committee_f x + current_sync_committee_f y,
-  next_sync_committee_f = next_sync_committee_f x + next_sync_committee_f y, \<dots> = BeaconState.more x + BeaconState.more y \<rparr>"
+  next_sync_committee_f = next_sync_committee_f x + next_sync_committee_f y,
+  latest_execution_payload_header = latest_execution_payload_header x + latest_execution_payload_header y,
+  next_withdrawal_index_f = next_withdrawal_index_f x + next_withdrawal_index_f y, 
+  next_withdrawal_validator_index_f = next_withdrawal_validator_index_f x + next_withdrawal_validator_index_f y,
+  historical_summaries_f = historical_summaries_f x + historical_summaries_f y, 
+  \<dots> = BeaconState.more x + BeaconState.more y \<rparr>"
 
 definition "zero_BeaconState_ext \<equiv> \<lparr> genesis_time_f = None,
   genesis_validators_root_f = None, 
@@ -187,7 +196,11 @@ definition "zero_BeaconState_ext \<equiv> \<lparr> genesis_time_f = None,
   finalized_checkpoint_f = None,
   inactivity_scores_f = None,
   current_sync_committee_f = None,
-  next_sync_committee_f = None, \<dots> = 0\<rparr>"
+  next_sync_committee_f = None,
+  latest_execution_payload_header = None,
+  next_withdrawal_index_f = None, 
+  next_withdrawal_validator_index_f = None,
+  historical_summaries_f = None, \<dots> = 0\<rparr>"
 
 instance
 
@@ -199,7 +212,6 @@ instance
   done
 end
 
-term "(P \<and>* Q)"
 
 
 
