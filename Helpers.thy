@@ -97,7 +97,7 @@ definition get_block_root_at_slot :: "Slot \<Rightarrow> (Hash256, 'a) cont" whe
     _ <- assertion (\<lambda>_. slot < state_slot \<and> state_slot \<le> upper_limit);
     i \<leftarrow> slot_to_u64 slot .% SLOTS_PER_HISTORICAL_ROOT config;
     b \<leftarrow> read block_roots;
-    lift_option (vector_index b i)
+     (vector_index b i)
   }"
 
 definition get_block_root :: " Epoch \<Rightarrow> (Hash256, 'a) cont" where
@@ -115,7 +115,7 @@ definition get_base_reward_per_increment :: " (u64, 'a) cont" where
 definition get_base_reward :: " u64 \<Rightarrow> (u64, 'a) cont" where
   "get_base_reward index \<equiv> do {
     v <- read validators;
-    validator \<leftarrow> lift_option (var_list_index v index);
+    validator \<leftarrow>  (var_list_index v index);
     increments \<leftarrow> effective_balance_f validator \\ EFFECTIVE_BALANCE_INCREMENT config;
     base_reward_per_increment \<leftarrow> get_base_reward_per_increment;
     increments .* base_reward_per_increment

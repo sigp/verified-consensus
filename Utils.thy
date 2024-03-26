@@ -11,28 +11,45 @@ definition enumerate :: "'b list \<Rightarrow> (u64 \<times> 'b) list" where
 definition safe_sum :: "u64 set \<Rightarrow> (u64, 'a) cont" where
   "safe_sum s \<equiv> foldrM (.+) (sorted_list_of_set s) 0"
 
-definition var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> 'b option" where
+definition var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> ('b, 'a) cont" where
   "var_list_index l i \<equiv>
     if i < var_list_len l then
-      Some (var_list_inner l ! u64_to_nat i)
+      return (var_list_inner l ! u64_to_nat i)
     else
-      None"
+      fail"
+
+definition var_list_update :: "'b \<Rightarrow> 'b VariableList \<Rightarrow> u64 \<Rightarrow> ('b VariableList, 'a) cont" where
+  "var_list_update e l i \<equiv>
+    if i < var_list_len l then
+      return ( VariableList (list_update (var_list_inner l) (u64_to_nat i) e))
+    else
+      fail"
+
+
 
 definition var_list_inner :: "'b VariableList \<Rightarrow> 'b list" where
   "var_list_inner l \<equiv> case l of VariableList inner \<Rightarrow> inner"
 
 definition unsafe_var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> 'b" where
-  "unsafe_var_list_index l i \<equiv> the (var_list_index l i)"
+  "unsafe_var_list_index l i \<equiv>  (var_list_inner l ! unat i) "
 
-definition vector_index :: "'b Vector \<Rightarrow> u64 \<Rightarrow> 'b option" where
+definition vector_index :: "'b Vector \<Rightarrow> u64 \<Rightarrow> ('b, 'a) cont" where
   "vector_index v i \<equiv>
     if i < vector_len v then
-      Some (vector_inner v ! u64_to_nat i)
+      return (vector_inner v ! u64_to_nat i)
     else
-      None"
+      fail"
+
+
+definition vector_update :: "'b \<Rightarrow> 'b Vector\<Rightarrow> u64 \<Rightarrow> ('b Vector, 'a) cont" where
+  "vector_update e l i \<equiv>
+    if i < vector_len l then
+      return ( Vector (list_update (vector_inner l) (u64_to_nat i) e))
+    else
+      fail"
 
 definition unsafe_vector_index :: "'b Vector \<Rightarrow> u64 \<Rightarrow> 'b" where
-  "unsafe_vector_index v i \<equiv> the (vector_index v i)"
+  "unsafe_vector_index v i \<equiv>  (vector_inner v ! (unat i))"
 
 definition shift_and_clear_bitvector :: "Config \<Rightarrow> Bitvector \<Rightarrow> Bitvector" where
   "shift_and_clear_bitvector c bv \<equiv>
@@ -74,5 +91,16 @@ definition integer_squareroot :: "u64 \<Rightarrow> (u64, 'a) cont" where
     (x', _) \<leftarrow> integer_squareroot_aux x y n;
     return x'
   }" 
+
+
+definition is_eligible_for_activation_queue :: "Validator \<Rightarrow> bool" where
+  "is_eligible_for_activation_queue val \<equiv>
+    activation_eligibility_epoch_f val = FAR_FUTURE_EPOCH \<and>
+      effective_balance_f val = MAX_EFFECTIVE_BALANCE"
+
+(* Opaque definition, we do not actually implement hashing *)
+definition hash_tree_root :: "'b \<Rightarrow> Hash256" where
+  "hash_tree_root x \<equiv> undefined"
+
 end
 end

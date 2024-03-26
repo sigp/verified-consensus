@@ -640,7 +640,7 @@ def new_slashings_context(
         sum(state.slashings) * PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX, total_balance
     )
     target_withdrawable_epoch = (
-        state_ctxt.current_peoch + EPOCHS_PER_SLASHINGS_VECTOR // 2
+        state_ctxt.current_epoch + EPOCHS_PER_SLASHINGS_VECTOR // 2
     )
     return SlashingsContext(
         adjusted_total_slashing_balance=adjusted_total_slashing_balance,

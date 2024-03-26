@@ -9,6 +9,8 @@ begin
 
 type_synonym u8 = "8 word"
 type_synonym u64 = "64 word"
+type_synonym u256 = "256 word"
+type_synonym ExecutionAddress = "160 word"
 datatype Slot = Slot u64
 datatype Epoch = Epoch u64
 
@@ -59,6 +61,26 @@ record SyncCommittee =
   pubkeys_f :: "PublicKey Vector"
   aggregate_pubkey_f :: PublicKey
 
+record ExecutionPayloadHeader =
+  parent_hash_f :: Hash256
+  fee_recipient_f :: ExecutionAddress
+  state_root_f :: Hash256
+  receipts_root_f :: Hash256
+  logs_bloom_f :: "u8 list"
+  prev_randao_f :: Hash256
+  block_number_f :: u64
+  gas_limit_f :: u64
+  timestamp_f :: u64
+  extra_data_f :: "u8 list"
+  base_fee_per_gas_f :: u256
+  block_hash_f :: Hash256
+  transactions_root_f :: Hash256
+  withdrawals_root_f :: Hash256
+
+record HistoricalSummary =
+  block_summary_root_f :: Hash256
+  state_summary_root_f :: Hash256
+
 record BeaconState =
   genesis_time_f :: "u64 option"
   genesis_validators_root_f :: "Hash256 option"
@@ -84,7 +106,9 @@ record BeaconState =
   inactivity_scores_f :: "u64 VariableList option"
   current_sync_committee_f :: "SyncCommittee option"
   next_sync_committee_f :: "SyncCommittee option"
-
-print_theorems
+  latest_execution_payload_header :: "ExecutionPayloadHeader option"
+  next_withdrawal_index_f :: "u64 option"
+  next_withdrawal_validator_index_f :: "u64 option"
+  historical_summaries_f :: "HistoricalSummary VariableList option"
 
 end

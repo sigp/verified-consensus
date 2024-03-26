@@ -2,6 +2,35 @@
 theory VerifiedConsensus
   imports Cont_Monad_Algebra Types Config "Word_Lib.Word_64" "Word_Lib.More_Arithmetic"
 begin
+        
+term the
+
+datatype ('a, 'b) Lex_Prod = Prod (major :'a) (minor : 'b) 
+
+instantiation Lex_Prod :: (preorder, preorder) preorder
+begin
+
+  fun less_eq_Lex_Prod :: "('a, 'b) Lex_Prod \<Rightarrow> ('a, 'b) Lex_Prod \<Rightarrow> bool"
+    where "less_eq_Lex_Prod (Prod a1 b1) (Prod a2 b2) = ((a1 \<le> a2) \<and> ((a2 \<le> a1) \<longrightarrow> b1 \<le> b2))"
+
+  definition less_Lex_Prod :: "('a, 'b) Lex_Prod \<Rightarrow> ('a, 'b) Lex_Prod \<Rightarrow> bool"
+    where "less_Lex_Prod a b \<equiv> less_eq a b \<and> \<not>(less_eq b a)"
+
+instance 
+  apply (standard)
+    apply (clarsimp simp: less_Lex_Prod_def)
+   apply (case_tac x;  clarsimp)
+  apply (case_tac x; case_tac y; case_tac z;  clarsimp)
+  by (metis order_trans)
+  
+end
+
+instantiation Lex_Prod :: (order, order) order
+begin
+instance
+  apply (standard)
+  by (case_tac x; case_tac y; clarsimp)
+end
 
 type_synonym ('var, 'val) heap = "'var \<Rightarrow> 'val option"
 
@@ -50,8 +79,18 @@ consts
 consts 
   write_to :: "'a \<Rightarrow> 'b \<Rightarrow> (unit, 'c) cont" 
 
+consts
+  modify_s :: "'a \<Rightarrow> ('b \<Rightarrow> 'c) \<Rightarrow> (unit, 'd) cont"
+
+
 abbreviation modify :: "'a \<Rightarrow> ('b \<Rightarrow> 'b) \<Rightarrow> (unit, 'c) cont" where
    "modify a f \<equiv> (bindCont (read a) (\<lambda>x. write_to a (f x)))"
+
+abbreviation modifyM :: "'a \<Rightarrow> ('b \<Rightarrow> ('b, 'c) cont) \<Rightarrow> (unit, 'c) cont" where
+   "modifyM a f \<equiv> (bindCont (read a) (\<lambda>x. bindCont (f x) (write_to a)))"
+
+adhoc_overloading modify_s modify modifyM
+
 
 abbreviation 
   "when b p \<equiv> (if b then p else return ())" 
@@ -71,6 +110,8 @@ definition "block_roots = Lens block_roots_f  (\<lambda>a b. a\<lparr>block_root
 definition "state_roots = Lens state_roots_f  (\<lambda>a b. a\<lparr>state_roots_f := b\<rparr> )"
 
 definition "historical_roots = Lens historical_roots_f  (\<lambda>a b. a\<lparr>historical_roots_f := b\<rparr> )"
+
+definition "historical_summaries = Lens historical_summaries_f (\<lambda>a b. a\<lparr>historical_summaries_f := b\<rparr>)"
 
 definition "eth1_data = Lens eth1_data_f  (\<lambda>a b. a\<lparr>eth1_data_f := b\<rparr> )"
 
@@ -106,13 +147,18 @@ definition "next_sync_committee = Lens next_sync_committee_f  (\<lambda>a b. a\<
 
 syntax
   "_mod_expr" :: "'a \<Rightarrow> 'b \<Rightarrow> 'c " ("_ ::= _" [1000, 13] 13)
+  "_mod_exprM" :: "'a \<Rightarrow> 'b \<Rightarrow> 'c " ("_ := _" [1000, 13] 13)
+
 
 
 translations
- "_mod_expr a b" \<rightharpoonup> "CONST modify a (\<lambda>a. b)"
+ "_mod_expr a b"  \<rightharpoonup> "CONST modify a (\<lambda>a. b)"
+ "_mod_exprM a b" \<rightharpoonup> "CONST modifyM a (\<lambda>a. b)"
+
+
 
 definition foo where 
-   "foo x y \<equiv>  (x ::= y)"
+   "foo x y \<equiv>  (x ::=  (0 :: nat))"
 
 thm foo_def
 
