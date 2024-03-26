@@ -43,6 +43,46 @@ instance
       auto intro: order_neq_le_trans simp: less_eq_Slot_def less_Slot_def slot_to_u64_bij)
 end
 
+(* Plus instance for Slot *)
+instantiation Slot :: plus
+begin
+
+definition plus_Slot :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot" where
+  "plus_Slot x y \<equiv> Slot (slot_to_u64 x + slot_to_u64 y)"
+
+instance by (intro_classes)
+end
+
+(* Divide instance for Slot *)
+instantiation Slot :: divide
+begin
+
+definition divide_Slot :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot" where
+  "divide_Slot x y \<equiv> Slot (slot_to_u64 x div slot_to_u64 y)"
+
+instance by (intro_classes)
+end
+
+(* Divide instance for Slot *)
+instantiation Slot :: times
+begin
+
+definition times_Slot :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot" where
+  "times_Slot x y \<equiv> Slot (slot_to_u64 x * slot_to_u64 y)"
+
+instance by (intro_classes)
+end
+
+(* Mod instance for Slot *)
+instantiation Slot :: modulo
+begin
+
+definition modulo_Slot :: "Slot \<Rightarrow> Slot \<Rightarrow> Slot" where
+  "modulo_Slot x y \<equiv> Slot (slot_to_u64 x mod slot_to_u64 y)"
+
+instance by (intro_classes)
+end
+
 (* Linear order instance for Epoch *)
 instantiation Epoch :: linorder
 begin

@@ -13,6 +13,7 @@ definition valid_var_list :: "('a \<Rightarrow> bool) \<Rightarrow> u64 \<Righta
     u64_to_nat (var_list_len l) \<le> u64_to_nat n \<and>
     list_all pred (var_list_inner l)"
 
+(* TODO: delete, truncates *)
 primrec vector_len :: "'a Vector \<Rightarrow> u64" where
   "vector_len (Vector l) = nat_to_u64 (length l)"
 
@@ -21,7 +22,7 @@ primrec vector_inner :: "'a Vector \<Rightarrow> 'a list" where
 
 definition valid_vector :: "('a \<Rightarrow> bool) \<Rightarrow> u64 \<Rightarrow> 'a Vector \<Rightarrow> bool" where
   "valid_vector pred n v \<equiv>
-    u64_to_nat (vector_len v) = u64_to_nat n \<and>
+    length (vector_inner v) = u64_to_nat n \<and>
     list_all pred (vector_inner v)"
 
 definition valid_hash256 :: "Hash256 \<Rightarrow> bool" where
