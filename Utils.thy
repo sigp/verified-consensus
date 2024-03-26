@@ -25,10 +25,11 @@ definition var_list_update :: "'b \<Rightarrow> 'b VariableList \<Rightarrow> u6
     else
       fail"
 
-
-
 definition var_list_inner :: "'b VariableList \<Rightarrow> 'b list" where
   "var_list_inner l \<equiv> case l of VariableList inner \<Rightarrow> inner"
+
+definition vector_inner :: "'b Vector \<Rightarrow> 'b list" where
+  "vector_inner l \<equiv> case l of Vector inner \<Rightarrow> inner"
 
 definition unsafe_var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> 'b" where
   "unsafe_var_list_index l i \<equiv>  (var_list_inner l ! unat i) "
@@ -40,11 +41,10 @@ definition vector_index :: "'b Vector \<Rightarrow> u64 \<Rightarrow> ('b, 'a) c
     else
       fail"
 
-
-definition vector_update :: "'b \<Rightarrow> 'b Vector\<Rightarrow> u64 \<Rightarrow> ('b Vector, 'a) cont" where
+definition vector_update :: "'b \<Rightarrow> 'b Vector \<Rightarrow> u64 \<Rightarrow> ('b Vector, 'a) cont" where
   "vector_update e l i \<equiv>
     if i < vector_len l then
-      return ( Vector (list_update (vector_inner l) (u64_to_nat i) e))
+      return (Vector (list_update (vector_inner l) (u64_to_nat i) e))
     else
       fail"
 

@@ -5,7 +5,7 @@ begin
 context hoare_logic
 begin
 
-type_synonym 'var State = "BeaconState \<times> (('var, heap_value) heap)"
+type_synonym 'var State = "BeaconState \<times> (('var, 'var heap_value) heap)"
 
 (*
 definition weigh_justification_and_finalization ::
@@ -103,24 +103,46 @@ definition get_block_root :: " Epoch \<Rightarrow> (Hash256, 'a) cont" where
     get_block_root_at_slot (compute_start_slot_at_epoch config epoch)"
 *)
 
-definition get_block_root_at_slot_pre :: "Slot \<Rightarrow> Hash256 \<Rightarrow> Hash256 Vector \<Rightarrow> 'var State \<Rightarrow> bool" where
-  "get_block_root_at_slot_pre slot slot_block_root block_roots_vec state \<equiv>
-    slot_to_u64 slot < 2^64 - SLOTS_PER_HISTORICAL_ROOT config \<and>
-    vector_index block_roots_vec (slot_to_u64 slot mod SLOTS_PER_HISTORICAL_ROOT config) = Some slot_block_root \<and>
-    (maps_to block_roots block_roots_vec state)"
+definition get_block_root_at_slot_pre :: "Slot \<Rightarrow> Hash256 \<Rightarrow> Slot \<Rightarrow> Hash256 Vector \<Rightarrow> 'var State \<Rightarrow> bool" where
+  "get_block_root_at_slot_pre slot slot_block_root current_slot block_roots_vec state \<equiv>
+    slot < current_slot \<and>
+    current_slot \<le> slot + Slot (SLOTS_PER_HISTORICAL_ROOT config) \<and>
+    slot_to_u64 slot \<le> maxBound - SLOTS_PER_HISTORICAL_ROOT config \<and>
+    SLOTS_PER_HISTORICAL_ROOT config \<noteq> 0 \<and>
+    valid_vector valid_hash256 (SLOTS_PER_HISTORICAL_ROOT config) block_roots_vec \<and>
+    vector_inner block_roots_vec ! u64_to_nat (slot_to_u64 slot mod SLOTS_PER_HISTORICAL_ROOT config) = slot_block_root \<and>
+    (maps_to block_roots block_roots_vec \<and>*
+     maps_to beacon_slots current_slot) state"
+
+lemma length_vector_inner[simp]: "length (vector_inner (Vector v)) = length v"
+  by (fastforce simp: vector_inner_def)
 
 lemma get_block_root_at_slot_proof:
-  "\<lblot>get_block_root_at_slot_pre slot slot_block_root block_roots_vec \<and>* R\<rblot>
+  "\<lblot>get_block_root_at_slot_pre slot slot_block_root current_slot block_roots_vec \<and>* R\<rblot>
    get_block_root_at_slot slot
-   \<lblot>get_block_root_at_slot_pre slot slot_block_root block_roots_vec \<and>* R\<rblot>"
+   \<lblot>get_block_root_at_slot_pre slot slot_block_root current_slot block_roots_vec \<and>* R\<rblot>"
   apply (rule hoare_weaken_pre)
    apply (clarsimp simp: get_block_root_at_slot_def)
-  apply wp
-
-
-lemma just_and_fin: "\<lblot>P\<rblot> f \<lblot>Q\<rblot>"
-  
-
+   apply wp
+  apply clarsimp
+  apply safe
+   apply (unfold get_block_root_at_slot_pre_def)
+   apply (clarsimp simp: plus_Slot_def less_eq_Slot_def)
+   apply (erule plus_minus_no_overflow_ab)
+   apply fastforce
+  apply clarsimp
+  apply sep_cancel+
+  apply safe
+  apply sep_cancel+
+  apply safe
+   apply (clarsimp simp: valid_vector_def)
+   apply (case_tac block_roots_vec)
+   apply clarsimp
+   apply (simp add: unat_less_helper word_mod_less_divisor word_neq_0_conv)
+  apply (case_tac block_roots_vec)
+  apply (clarsimp simp: valid_vector_def)
+  apply (rule unat_lt2p[where 'a=64, simplified])
+  done
 
 end
 end

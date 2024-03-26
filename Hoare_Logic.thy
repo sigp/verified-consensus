@@ -851,17 +851,12 @@ lemma add_wp_slot[wp]: "hoare_triple (P ((n :: Slot) + m)) (c (n + m)) Q \<Longr
   done
 
 lemma mod_wp[wp]: "hoare_triple (P (n mod m)) (c (n mod m)) Q \<Longrightarrow>
-  hoare_triple (\<lambda>s. n \<le> n mod m \<and> (n \<le> n mod m \<longrightarrow> P (n mod m) s)) 
+  hoare_triple (\<lambda>s. m \<noteq> 0 \<and> (m \<noteq> 0 \<longrightarrow> P (n mod m) s))
 (do {x <- (n .% m); c x}) Q"
   apply (rule hoare_weaken_pre)
-   apply (clarsimp simp: word_unsigned_mod_def)
-   apply (simp only: Let_unfold)
-   apply (wp, clarsimp simp: bindCont_return' plus_Slot_def)
-    apply assumption
+   apply (unfold word_unsigned_mod_def)
    apply wp
-  apply (clarsimp simp: plus_Slot_def)
-  apply safe
-  apply (fastforce simp: less_eq_Slot_def)
+  apply fastforce
   done
 
 lemma div_wp[wp]: "hoare_triple (P (n div m)) (c (n div m)) Q \<Longrightarrow>
@@ -870,9 +865,21 @@ lemma div_wp[wp]: "hoare_triple (P (n div m)) (c (n div m)) Q \<Longrightarrow>
   apply (rule hoare_weaken_pre)
    apply (unfold word_unsigned_div_def, wp)
    apply (clarsimp simp: bindCont_return')
-
   done
 
+lemma vector_index_wp[wp]: "hoare_triple (P (vector_inner v ! unat i)) (c (vector_inner v ! unat i)) Q \<Longrightarrow>
+  hoare_triple (\<lambda>s. unat i < length (vector_inner v) \<and> length (vector_inner v) < 2^64 \<and>
+    (unat i < length (vector_inner v) \<and> length (vector_inner v) < 2^64 \<longrightarrow> P (vector_inner v ! unat i) s))
+(do { x <- vector_index v i; c x}) Q"
+  apply (rule hoare_weaken_pre)
+   apply (unfold vector_index_def)
+   apply wp
+    apply (clarsimp simp: bindCont_return')
+    apply assumption
+   apply wp
+  apply safe
+  apply (case_tac v)
+  by (fastforce simp: vector_inner_def intro!: unat_ucast_less_no_overflow)
 
 end
 
