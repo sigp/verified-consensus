@@ -16,9 +16,27 @@
 
 theory Extended_Separation_Algebra
 imports
-  "../Lib"
   "../sep_algebra/Sep_Algebra_L4v"
+  "HOL-Eisbach.Eisbach"
 begin
+
+definition
+  pred_conj :: "('a \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> bool)" (infixl "and" 35)
+where
+  "pred_conj P Q \<equiv> \<lambda>x. P x \<and> Q x"
+
+definition
+  pred_disj :: "('a \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> bool)" (infixl "or" 30)
+where
+  "pred_disj P Q \<equiv> \<lambda>x. P x \<or> Q x"
+
+definition
+  pred_neg :: "('a \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> bool)" ("not _" [40] 40)
+where
+  "pred_neg P \<equiv> \<lambda>x. \<not> P x"
+
+definition "K \<equiv> \<lambda>x y. x"
+
 
 instantiation "bool" :: stronger_sep_algebra
 begin

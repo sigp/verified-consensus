@@ -66,7 +66,7 @@ where
         get_unslashed_participating_indices TIMELY_TARGET_FLAG_INDEX current_epoch;
       total_active_balance    \<leftarrow> get_total_active_balance;
       previous_target_balance \<leftarrow> get_total_balance  previous_indices;
-      current_target_balance  \<leftarrow> get_total_balance  previous_indices;
+      current_target_balance  \<leftarrow> get_total_balance  current_indices;
       weigh_justification_and_finalization
          total_active_balance previous_target_balance current_target_balance
     }

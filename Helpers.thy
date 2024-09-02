@@ -80,7 +80,8 @@ where
 definition get_total_balance :: " u64 set \<Rightarrow> (u64, 'a) cont" where
   "get_total_balance indices \<equiv> do {
     v <- read validators;
-    total \<leftarrow> safe_sum ((\<lambda>i. effective_balance_f (unsafe_var_list_index (v) i)) ` indices);
+    inds <- select {xs. distinct xs \<and> list.set xs = indices}; 
+    total \<leftarrow> safe_sum (map  (effective_balance_f o unsafe_var_list_index v) inds);
     return (max (EFFECTIVE_BALANCE_INCREMENT config) total)
   }"
 

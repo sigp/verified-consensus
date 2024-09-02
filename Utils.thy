@@ -5,11 +5,22 @@ begin
 context verified_con
 begin
 
+function range where
+  "range (start :: nat) stop 0 = []" |
+  "range (start :: nat) stop (Suc n) = (if start \<ge> stop then [] else start # (range (start + (Suc n)) stop (Suc n)))"
+     apply auto
+  by (case_tac b; clarsimp)
+termination
+  apply (relation "measure(\<lambda>(i::nat,j, k). (j - i + 1))") 
+   apply (auto)[1]
+  apply (clarsimp)
+  by simp
+
 definition enumerate :: "'b list \<Rightarrow> (u64 \<times> 'b) list" where
   "enumerate l \<equiv> zip (map nat_to_u64 [0..<length l]) l"
 
-definition safe_sum :: "u64 set \<Rightarrow> (u64, 'a) cont" where
-  "safe_sum s \<equiv> foldrM (.+) (sorted_list_of_set s) 0"
+definition safe_sum :: "u64 list \<Rightarrow> (u64, 'a) cont" where
+  "safe_sum s \<equiv> foldrM word_unsigned_add ( s) 0"
 
 definition var_list_index :: "'b VariableList \<Rightarrow> u64 \<Rightarrow> ('b, 'a) cont" where
   "var_list_index l i \<equiv>

@@ -23,6 +23,7 @@ locale programming_constructs_simple = programming_constructs  +
   constrains test :: "'state set \<Rightarrow> 'a"  
   constrains lib :: "'varname \<Rightarrow> 'a \<Rightarrow> 'a"
   constrains lib_bool :: "'varname \<Rightarrow> ('state \<times> 'state) set \<Rightarrow> ('state \<times> 'state) set"
+  constrains lib_bool_sets :: "'varname \<Rightarrow> 'state set \<Rightarrow> 'state set"
   constrains pgm :: "('state \<times> 'state) set \<Rightarrow> 'a"  
   constrains env :: "('state \<times> 'state) set \<Rightarrow> 'a"  
   constrains set_var :: "'varname \<Rightarrow> 'id Val \<Rightarrow> 'state \<Rightarrow> 'state"

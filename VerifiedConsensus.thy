@@ -1,9 +1,7 @@
 (* Definition of the `verified_con` locale which is used in the rest of the project *)
 theory VerifiedConsensus
-  imports Cont_Monad_Algebra Types Config "Word_Lib.Word_64" "Word_Lib.More_Arithmetic"
+  imports "algebra/rg-algebra/AbstractAtomicTest/Programming_Constructs" Cont_Monad_Algebra Types Config "Word_Lib.Word_64" "Word_Lib.More_Arithmetic"  Invariants Lens
 begin
-        
-term "(!)"
 
 datatype ('a, 'b) Lex_Prod = Prod (major :'a) (minor : 'b) 
 
@@ -32,9 +30,9 @@ instance
   by (case_tac x; case_tac y; clarsimp)
 end
 
-type_synonym ('var, 'val) heap = "'var \<Rightarrow> 'val option"
+declare [[show_sorts=false]]
 
-datatype ('a, 'b) lens = Lens (get : "'a \<Rightarrow> 'b") (set: "'a \<Rightarrow> 'b \<Rightarrow> 'a")
+type_synonym ('var, 'val) heap = "'var \<Rightarrow> 'val option"
 
 datatype ('var) heap_value = list "'var heap_value list" | u8 u8 | u64 u64 | ptr "'var"
 
@@ -67,6 +65,12 @@ primrec is_u64 where
   "is_u64 (list _) = False"|
   "is_u64 (u8 _)   = False"|
   "is_u64 (u64 _)  = True"
+
+primrec is_ptr where
+  "is_ptr (list _) = False"|
+  "is_ptr (u8 _)   = False"|
+  "is_ptr (u64 _)  = False" |
+  "is_ptr (ptr _) = True"
 
 
 
@@ -104,59 +108,60 @@ abbreviation modifyM :: "'a \<Rightarrow> ('b \<Rightarrow> ('b, 'c) cont) \<Rig
 
 adhoc_overloading modify_s modify modifyM
 
-
 abbreviation 
   "when b p \<equiv> (if b then p else return ())" 
 
-definition "genesis_time = Lens genesis_time_f (\<lambda>a b. a\<lparr>genesis_time_f := b\<rparr> )"
 
-definition "genesis_validators_root = Lens genesis_validators_root_f  (\<lambda>a b. a\<lparr>genesis_validators_root_f := b\<rparr> )"
+definition genesis_time  where
+ "genesis_time \<equiv> lens_comp (Lens genesis_time_f (\<lambda>(a :: BeaconState) b. a\<lparr>genesis_time_f := b\<rparr> ) (\<lambda>_. True)) first"
 
-definition "beacon_slots = Lens BeaconState.slot_f  (\<lambda>a b. a\<lparr> BeaconState.slot_f := b\<rparr> )"
+definition "genesis_validators_root = Lens genesis_validators_root_f  (\<lambda>(a :: BeaconState) b. a\<lparr>genesis_validators_root_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "fork         = Lens fork_f  (\<lambda>a b. a\<lparr>fork_f := b\<rparr> )"
+definition "beacon_slots = Lens BeaconState.slot_f  (\<lambda>(a :: BeaconState) b. a\<lparr> BeaconState.slot_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "latest_block_header = Lens latest_block_header_f  (\<lambda>a b. a\<lparr>latest_block_header_f := b\<rparr> )"
+definition "fork         = Lens fork_f  (\<lambda>(a :: BeaconState) b. a\<lparr>fork_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "block_roots = Lens block_roots_f  (\<lambda>a b. a\<lparr>block_roots_f := b\<rparr> )"
+definition "latest_block_header = Lens latest_block_header_f  (\<lambda>(a :: BeaconState) b. a\<lparr>latest_block_header_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "state_roots = Lens state_roots_f  (\<lambda>a b. a\<lparr>state_roots_f := b\<rparr> )"
+definition "block_roots = Lens block_roots_f  (\<lambda>(a :: BeaconState) b. a\<lparr>block_roots_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "historical_roots = Lens historical_roots_f  (\<lambda>a b. a\<lparr>historical_roots_f := b\<rparr> )"
+definition "state_roots = Lens state_roots_f  (\<lambda>(a :: BeaconState) b. a\<lparr>state_roots_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "historical_summaries = Lens historical_summaries_f (\<lambda>a b. a\<lparr>historical_summaries_f := b\<rparr>)"
+definition "historical_roots = Lens historical_roots_f  (\<lambda>(a :: BeaconState) b. a\<lparr>historical_roots_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "eth1_data = Lens eth1_data_f  (\<lambda>a b. a\<lparr>eth1_data_f := b\<rparr> )"
+definition "historical_summaries = Lens historical_summaries_f (\<lambda>(a :: BeaconState) b. a\<lparr>historical_summaries_f := b\<rparr>) (\<lambda>_. True) |> first"
 
-definition "eth1_data_votes = Lens eth1_data_votes_f  (\<lambda>a b. a\<lparr>eth1_data_votes_f := b\<rparr> )"
+definition "eth1_data = Lens eth1_data_f  (\<lambda>(a :: BeaconState) b. a\<lparr>eth1_data_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "eth1_deposit_index = Lens eth1_deposit_index_f  (\<lambda>a b. a\<lparr>eth1_deposit_index_f := b\<rparr> )"
+definition "eth1_data_votes = Lens eth1_data_votes_f  (\<lambda>(a :: BeaconState) b. a\<lparr>eth1_data_votes_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "validators = Lens validators_f  (\<lambda>a b. a\<lparr>validators_f := b\<rparr> )"
+definition "eth1_deposit_index = Lens eth1_deposit_index_f  (\<lambda>(a :: BeaconState) b. a\<lparr>eth1_deposit_index_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "balances = Lens balances_f  (\<lambda>a b. a\<lparr>balances_f := b\<rparr> )"
+definition "validators = Lens validators_f  (\<lambda>(a :: BeaconState) b. a\<lparr>validators_f := b\<rparr> ) (case_option True (\<lambda>xs. let ys = var_list_inner xs in sum_list (map (unat o effective_balance_f) ys) < 2^64 )) |> first"
 
-definition "randao_mixes = Lens randao_mixes_f  (\<lambda>a b. a\<lparr>randao_mixes_f := b\<rparr> )"
+definition "balances = Lens balances_f  (\<lambda>(a :: BeaconState) b. a\<lparr>balances_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "slashings = Lens slashings_f  (\<lambda>a b. a\<lparr>slashings_f := b\<rparr> )"
+definition "randao_mixes = Lens randao_mixes_f  (\<lambda>(a :: BeaconState) b. a\<lparr>randao_mixes_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "previous_epoch_participation = Lens previous_epoch_participation_f  (\<lambda>a b. a\<lparr>previous_epoch_participation_f := b\<rparr> )"
+definition "slashings = Lens slashings_f  (\<lambda>(a :: BeaconState) b. a\<lparr>slashings_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "current_epoch_participation = Lens current_epoch_participation_f  (\<lambda>a b. a\<lparr>current_epoch_participation_f := b\<rparr> )"
+definition "previous_epoch_participation = Lens previous_epoch_participation_f  (\<lambda>(a :: BeaconState) b. a\<lparr>previous_epoch_participation_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "justification_bits = Lens justification_bits_f  (\<lambda>a b. a\<lparr>justification_bits_f := b\<rparr> )"
+definition "current_epoch_participation = Lens current_epoch_participation_f  (\<lambda>(a :: BeaconState) b. a\<lparr>current_epoch_participation_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "previous_justified_checkpoint = Lens previous_justified_checkpoint_f  (\<lambda>a b. a\<lparr>previous_justified_checkpoint_f := b\<rparr> )"
+definition "justification_bits = Lens justification_bits_f  (\<lambda>(a :: BeaconState) b. a\<lparr>justification_bits_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "current_justified_checkpoint = Lens current_justified_checkpoint_f  (\<lambda>a b. a\<lparr>current_justified_checkpoint_f := b\<rparr> )"
+definition "previous_justified_checkpoint = Lens previous_justified_checkpoint_f  (\<lambda>(a :: BeaconState) b. a\<lparr>previous_justified_checkpoint_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "finalized_checkpoint = Lens finalized_checkpoint_f  (\<lambda>a b. a\<lparr>finalized_checkpoint_f := b\<rparr> )"
+definition "current_justified_checkpoint = Lens current_justified_checkpoint_f  (\<lambda>(a :: BeaconState) b. a\<lparr>current_justified_checkpoint_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "inactivity_scores = Lens inactivity_scores_f  (\<lambda>a b. a\<lparr>inactivity_scores_f := b\<rparr> )"
+definition "finalized_checkpoint = Lens finalized_checkpoint_f  (\<lambda>(a :: BeaconState) b. a\<lparr>finalized_checkpoint_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "current_sync_committee = Lens current_sync_committee_f  (\<lambda>a b. a\<lparr>current_sync_committee_f := b\<rparr> )"
+definition "inactivity_scores = Lens inactivity_scores_f  (\<lambda>(a :: BeaconState) b. a\<lparr>inactivity_scores_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "next_sync_committee = Lens next_sync_committee_f  (\<lambda>a b. a\<lparr>next_sync_committee_f := b\<rparr> )"
+definition "current_sync_committee = Lens current_sync_committee_f  (\<lambda>(a :: BeaconState) b. a\<lparr>current_sync_committee_f := b\<rparr> ) (\<lambda>_. True) |> first"
+
+definition "next_sync_committee = Lens next_sync_committee_f  (\<lambda>(a :: BeaconState) b. a\<lparr>next_sync_committee_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
 syntax
   "_mod_expr" :: "'a \<Rightarrow> 'b \<Rightarrow> 'c " ("_ ::= _" [1000, 13] 13)
@@ -169,10 +174,10 @@ translations
  "_mod_exprM a b" \<rightharpoonup> "CONST modifyM a (\<lambda>a. b)"
 
 definition foo where 
-   "foo x y \<equiv>  (x ::=  (0 :: nat))"
+   "foo x y \<equiv>  (x :=  return (0 :: nat))"
 
 
-locale verified_con = constrained_atomic +
+locale verified_con = idle_command +
   constrains pgm  :: "(BeaconState \<times> ('var, 'var heap_value) heap) rel \<Rightarrow> 'a"
   constrains env  :: "(BeaconState \<times> ('var, 'var heap_value) heap) rel \<Rightarrow> 'a"
   constrains test :: "(BeaconState \<times> ('var, 'var heap_value) heap) set \<Rightarrow> 'a"
@@ -180,18 +185,38 @@ locale verified_con = constrained_atomic +
 
 begin
 
+text \<open>locale verified_con = idle_command + test_liberation  + 
+                      liberation +  
+                    inf: sync_liberation inf + 
+                    conj: sync_liberation conj + 
+                    par: sync_liberation par +
+  constrains pgm  :: "(BeaconState \<times> ('var, 'var heap_value) heap) rel \<Rightarrow> 'a"
+  constrains env  :: "(BeaconState \<times> ('var, 'var heap_value) heap) rel \<Rightarrow> 'a"
+  constrains test :: "(BeaconState \<times> ('var, 'var heap_value) heap) set \<Rightarrow> 'a"
+  constrains lib  :: "'var \<Rightarrow> 'a \<Rightarrow> 'a"
+  constrains lib_bool  :: "'var \<Rightarrow> 
+                           (BeaconState \<times> ('var, 'var heap_value) heap) rel \<Rightarrow>
+                           (BeaconState \<times> ('var, 'var heap_value) heap) rel"
+  constrains lib_bool_sets  :: "'var \<Rightarrow> 
+                           (BeaconState \<times> ('var, 'var heap_value) heap) set \<Rightarrow>
+                           (BeaconState \<times> ('var, 'var heap_value) heap) set"
+
+  fixes config :: "Config"
+\<close>
+
+
 lemma nil_not_top[simp]: "(nil = \<top>) = False"
   by (metis (full_types) UNIV_I abstract_hom_commands.hom_iso_eq empty_iff seq_abort seq_nil_left
       test.abstract_hom_commands_axioms)
 
-definition read_beacon :: "((BeaconState, 'b option) lens) \<Rightarrow> ('b, 'a) cont" where
-  "read_beacon l \<equiv> do { state \<leftarrow> getState; if (get l (fst state)) = None then fail else return (the (get l (fst state))) }"
+definition read_beacon :: "((BeaconState \<times> ('var \<Rightarrow> 'var heap_value option), 'b option) lens)  \<Rightarrow> ('b, 'a) cont" where
+  "read_beacon l \<equiv> do { state \<leftarrow> getState; if (get l  state) = None then fail else return (the (get l state)) }"
 
 
-definition write_beacon :: "((BeaconState, 'b option) lens) \<Rightarrow> 'b \<Rightarrow> (unit, 'a) cont" where
+definition write_beacon :: "((BeaconState \<times> ('var \<Rightarrow> 'var heap_value option), 'b option) lens) \<Rightarrow> 'b \<Rightarrow> (unit, 'a) cont" where
   "write_beacon l b \<equiv> do { state \<leftarrow> getState; 
-                          if (get l (fst state)) = None then fail else
-                          setState (set l (fst state) (Some b), (snd state))  }"
+                          if (get l state) = None then fail else
+                          setState (set l state (Some b))  }"
 
 definition "lift_option v = (if v = None then fail else return (the v))"
 

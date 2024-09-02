@@ -4,6 +4,9 @@ theory State_Relations
   "HOL-Library.FSet"
 begin
 
+instance  set :: (type) refinement_lattice 
+  by (standard)
+
 locale state_relations = idle_command (* lib_last
   for lib_last :: "'b \<Rightarrow> 'a::refinement_lattice \<Rightarrow> 'a" ("L\<^sup>C\<^sub>_ _" [999, 999] 999) + *) +
   constrains test :: "'state set \<Rightarrow> 'a"
@@ -15,7 +18,7 @@ locale state_relations = idle_command (* lib_last
   assumes get_set1: "\<And>k x s. get_var k (set_var k x s) = x"
   assumes get_set2: "\<And>k x k' s. k \<noteq> k' \<Longrightarrow> get_var k' (set_var k x s) = get_var k' s"
   assumes set_set1: "\<And>k x x' s. set_var k x (set_var k x' s) = set_var k x s"
-  assumes set_set2: "\<And>k x x' s. set_var k x (set_var k x' s) = set_var k x' (set_var k x s)"
+  (* assumes set_set2: "\<And>k x x' s. set_var k x (set_var k x' s) = set_var k x' (set_var k x s)" *)
 begin
 
 text \<open>The identity relation on all variables not in the set $vars$. \<close>

@@ -1,28 +1,29 @@
 theory Invariants
-  imports Main Types Unsigned Config HOL.Nat
+  imports Main Types Config HOL.Nat
 begin
 
+
 primrec var_list_len :: "'a VariableList \<Rightarrow> u64" where
-  "var_list_len (VariableList l) = nat_to_u64 (length l)"
+  "var_list_len (VariableList l) = of_nat (length l)"
 
 primrec var_list_inner :: "'a VariableList \<Rightarrow> 'a list" where
   "var_list_inner (VariableList l) = l"
 
 definition valid_var_list :: "('a \<Rightarrow> bool) \<Rightarrow> u64 \<Rightarrow> 'a VariableList \<Rightarrow> bool" where
   "valid_var_list pred n l \<equiv>
-    u64_to_nat (var_list_len l) \<le> u64_to_nat n \<and>
+    unat (var_list_len l) \<le> unat n \<and>
     list_all pred (var_list_inner l)"
 
 (* TODO: delete, truncates *)
 primrec vector_len :: "'a Vector \<Rightarrow> u64" where
-  "vector_len (Vector l) = nat_to_u64 (length l)"
+  "vector_len (Vector l) = of_nat (length l)"
 
 primrec vector_inner :: "'a Vector \<Rightarrow> 'a list" where
   "vector_inner (Vector l) = l"
 
 definition valid_vector :: "('a \<Rightarrow> bool) \<Rightarrow> u64 \<Rightarrow> 'a Vector \<Rightarrow> bool" where
   "valid_vector pred n v \<equiv>
-    length (vector_inner v) = u64_to_nat n \<and>
+    unat (vector_len v) = unat n \<and>
     list_all pred (vector_inner v)"
 
 definition valid_hash256 :: "Hash256 \<Rightarrow> bool" where
@@ -59,7 +60,7 @@ primrec bitvector_inner :: "Bitvector \<Rightarrow> bool list" where
   "bitvector_inner (Bitvector bools) = bools"
 
 definition valid_bitvector :: "u64 \<Rightarrow> Bitvector \<Rightarrow> bool" where
-  "valid_bitvector n v \<equiv> case v of Bitvector bools \<Rightarrow> length bools = u64_to_nat n"
+  "valid_bitvector n v \<equiv> case v of Bitvector bools \<Rightarrow> length bools = unat n"
 
 definition valid_checkpoint :: "Checkpoint \<Rightarrow> bool" where
   "valid_checkpoint c \<equiv> valid_hash256 (Checkpoint.root_f c)"

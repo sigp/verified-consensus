@@ -206,11 +206,7 @@ proof -
     proof -
       have "((\<epsilon>(p1) \<parallel> \<epsilon>(p2)) \<squnion> (\<epsilon>(p1) \<parallel> Pgm) \<squnion> (Pgm \<parallel> \<epsilon>(p2)) \<squnion> (Pgm \<parallel> Pgm))\<^sup>\<omega> =
             ((\<epsilon>(p1) \<sqinter> \<epsilon>(p2)) \<squnion> \<pi>(p1) \<squnion> \<pi>(p2) \<squnion> \<bottom>)\<^sup>\<omega> "  
-<<<<<<< HEAD
-        by (metis (no_types, opaque_lifting) env_par_env_axiom env_par_pgm_axiom inf_top.right_neutral 
-=======
         by (metis (no_types) env_par_env_axiom env_par_pgm_axiom inf_top.right_neutral 
->>>>>>> a87ff0585792b159a497ae6dae5b85c93f31726d
                 local.flip_def2 par.sync_commute Pgm_def pgm.hom_inf pgm_par_pgm)
       thus ?thesis by (simp add: sup_assoc)
     qed

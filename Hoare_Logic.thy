@@ -1,6 +1,6 @@
 theory Hoare_Logic
   imports ProcessEpoch "algebra/rg-algebra/AbstractAtomicTest/Programming_Constructs" 
-  "jormungand/sep_algebra/Sep_Tactics"
+  Fun_Algebra
   Word_Lib.More_Divides Word_Lib.Word_EqI
 Word_Lib.Word_64 Word_Lib.Bitwise Word_Lib.Word_Lemmas
 begin
@@ -22,7 +22,7 @@ lemma Id_on_relcomp_eq: "Id_on P O Id_on Q = Id_on (P \<inter> Q)"
   by (safe; clarsimp simp: Id_on_def, rule relcompI, blast, blast)
 
 
-instantiation option :: (type) stronger_sep_algebra begin
+(* instantiation option :: (type) stronger_sep_algebra begin
 
 fun sep_disj_option :: "'b option \<Rightarrow> 'b option \<Rightarrow> bool" where
  "sep_disj_option (Some x) (Some y) = False" | 
@@ -32,11 +32,11 @@ fun plus_option where
  "plus_option (Some x) (Some y) = Some x" | 
  "plus_option (None) y = y" |
  "plus_option  x (None) = x"
-
+*)
 lemma [simp]: "x + None = x"
-  by (case_tac x; clarsimp)
+  by (case_tac x; clarsimp simp: plus_option_def)
 
-definition "zero_option = None"
+(* definition "zero_option = None"
 
 instance
   apply (standard, case_tac x; (clarsimp simp: zero_option_def)?)
@@ -46,8 +46,9 @@ instance
    apply (case_tac x; case_tac y; case_tac z; clarsimp)
   done
 end
+*)
 
-instantiation "fun" :: (type, stronger_sep_algebra) stronger_sep_algebra begin
+(* instantiation "fun" :: (type, stronger_sep_algebra) stronger_sep_algebra begin
 
 definition sep_disj_fun :: "('a \<Rightarrow> 'b) \<Rightarrow> ('a \<Rightarrow> 'b) \<Rightarrow> bool" where
  "sep_disj_fun f g \<equiv> (\<forall>x. f x ## g x)" 
@@ -68,8 +69,8 @@ instance
   apply (blast)
   done
 end
-
-instantiation prod :: (stronger_sep_algebra, stronger_sep_algebra) stronger_sep_algebra begin
+*)
+(* instantiation prod :: (stronger_sep_algebra, stronger_sep_algebra) stronger_sep_algebra begin
 
 fun sep_disj_prod :: "'a \<times> 'b \<Rightarrow> 'a \<times> 'b \<Rightarrow> bool" where
  "sep_disj_prod (a,b) (x,y) \<longleftrightarrow> (a ## x \<and> b ## y)" 
@@ -88,32 +89,110 @@ instance
   by blast
 
 end
-
-instantiation unit ::  stronger_sep_algebra begin
-
-fun sep_disj_unit :: "unit \<Rightarrow> unit \<Rightarrow> bool" where
- "sep_disj_unit x y \<longleftrightarrow> True" 
-
-fun plus_unit :: "unit \<Rightarrow> unit \<Rightarrow> unit" where
- "plus_unit x y = ()" 
+*)
 
 
-definition "zero_unit = ()"
+  
+  sorry  
 
+text \<open>
+
+lemma "valid_lens a \<Longrightarrow> valid_lens b \<Longrightarrow> valid_lens c \<Longrightarrow> 
+      (\<lambda>s. set b s v) o (\<lambda>s. set c s v') = (\<lambda>s. set c s v') o (\<lambda>s. set b s v) \<Longrightarrow> 
+      (\<lambda>s. set a s v'') o ((\<lambda>s. set b s v) o (\<lambda>s. set c s v')) = 
+      ((\<lambda>s. set b (s :: bool \<times> bool \<times> bool) v) o (\<lambda>s. set c s v')) o (\<lambda>s. set a s v'') \<Longrightarrow> 
+     (\<lambda>s. set a s v'') o (\<lambda>s. set b s v) =  (\<lambda>s. set b s v) o (\<lambda>s. set a s v'')"
+  apply (frule lens_commute_cases, assumption, assumption) 
+  apply (elim disjE)
+    apply simp
+  apply (clarsimp)
+  apply (intro ext; clarsimp?)
+  sledgehammer
+  oops
+  apply (frule lens_commute_cases, assumption, assumption) 
+  apply (elim disjE; clarsimp)
+     apply (smt (verit, ccfv_SIG) fun.map_comp)
+    apply (rule lens_commuteI, assumption, assumption)
+  apply (clarsimp)
+  oops
+  
+
+  
+  apply (clarsimp simp: valid_lens_def) 
+  
+  apply (drule_tac x=x in fun_cong) back
+  apply (clarsimp)
+  
+  \<close>
+
+
+
+
+instantiation p_set :: (type) sep_algebra begin
+definition "sep_disj_p_set x y \<equiv>  disj_cylindric_set (set_of x) (set_of y) "
+definition "plus_p_set x y \<equiv> Abs_p_set (Pair ({h. \<exists>f\<in>(set_of x). \<exists>g\<in>(set_of y). h = f o g}) (point_of x o point_of y))"
+
+lemma set_of_plus_domain_iff: "set_of ( x + y) = {h. \<exists>f\<in>(set_of x). \<exists>g\<in>(set_of y). h = f o g}"
+  apply (subst set_of_def)
+  apply (subst plus_p_set_def)
+  apply (subst Abs_p_set_inverse; clarsimp)
+  apply (intro conjI)
+   apply (rule_tac x="point_of x" in bexI; clarsimp?)
+   apply (rule_tac x="point_of y" in bexI; clarsimp?)
+  by (rule_tac x=id in bexI;clarsimp)
+
+lemma point_of_plus_domain_iff: "point_of ( x + y) = point_of x o point_of y"
+  apply (subst point_of_def)
+  apply (subst plus_p_set_def)
+
+  apply (subst Abs_p_set_inverse; clarsimp)
+  apply (intro conjI)
+   apply (rule_tac x="point_of x" in bexI; clarsimp?)
+   apply (rule_tac x="point_of y" in bexI; clarsimp?)
+  by (rule_tac x=id in bexI;clarsimp)
+
+lemmas plus_p_simps = point_of_plus_domain_iff set_of_plus_domain_iff
+
+definition "zero_p_set \<equiv> id_p"
 instance
-  by (standard, case_tac x; (clarsimp simp: zero_unit_def)?)
- 
-
+apply (standard)
+        apply (clarsimp simp: sep_disj_p_set_def zero_p_set_def disj_cylindric_set_def)
+       apply (clarsimp simp:  sep_disj_p_set_def zero_p_set_def disj_cylindric_set_def)
+      apply (rule p_set_eqI; clarsimp simp: point_of_plus_domain_iff set_of_plus_domain_iff zero_p_set_def) 
+  apply (rule p_set_eqI; clarsimp simp: plus_p_simps zero_p_set_def) 
+      apply (clarsimp simp:  sep_disj_p_set_def zero_p_set_def disj_cylindric_set_def)
+  apply (intro set_eqI iffI; clarsimp)
+      apply blast
+  apply metis
+       apply (clarsimp simp:  sep_disj_p_set_def zero_p_set_def disj_cylindric_set_def)
+  using point_in_set apply blast
+       apply (clarsimp simp:  sep_disj_p_set_def zero_p_set_def disj_cylindric_set_def)
+    apply (intro p_set_eqI set_eqI iffI; clarsimp simp: plus_p_simps)
+      apply (metis comp_assoc)
+     apply (metis comp_assoc)
+    apply (meson comp_assoc)
+   apply (clarsimp simp:  plus_p_simps sep_disj_p_set_def zero_p_set_def disj_cylindric_set_def)
+   apply (metis comp_id id_in_set)
+   apply (clarsimp simp:  plus_p_simps sep_disj_p_set_def zero_p_set_def disj_cylindric_set_def)
+  by (metis (no_types, lifting) comp_assoc fun.map_id0 id_apply id_in_set)
 end
 
 
+definition "maps_to l v \<equiv> \<lambda>D. valid_lens l \<and> 
+        set_of D = ({f. (\<exists>v. (\<lambda>s. set l s v) = f)} \<union> {id}) \<and> point_of D = (\<lambda>s. set l s (Some v))"
 
+notation maps_to (infixl "\<mapsto>\<^sub>l" 50)
 
+definition "lift P s = (\<exists>S. P S \<and> point_of S s = s)"
+
+notation lift ("\<lless>_\<then>")
 
 instantiation BeaconState_ext :: (stronger_sep_algebra) stronger_sep_algebra begin
 
-
 definition sep_disj_BeaconState_ext :: "'a BeaconState_scheme \<Rightarrow> 'a BeaconState_scheme \<Rightarrow> bool" 
+  where "sep_disj_BeaconState_ext x y == x = y"
+                                                
+text \<open> definition sep_disj_BeaconState_ext :: "'a BeaconState_scheme \<Rightarrow> 'a BeaconState_scheme \<Rightarrow> bool" 
   where "sep_disj_BeaconState_ext x y == 
   genesis_time_f x ## genesis_time_f y \<and> 
   genesis_validators_root_f x ## genesis_validators_root_f y \<and> 
@@ -141,9 +220,12 @@ definition sep_disj_BeaconState_ext :: "'a BeaconState_scheme \<Rightarrow> 'a B
   latest_execution_payload_header x ## latest_execution_payload_header y \<and> 
   next_withdrawal_index_f x ## next_withdrawal_index_f y \<and> 
   next_withdrawal_validator_index_f x ## next_withdrawal_validator_index_f y \<and>
-  historical_summaries_f x ## historical_summaries_f y \<and> BeaconState.more x ## BeaconState.more y"
+  historical_summaries_f x ## historical_summaries_f y \<and> BeaconState.more x ## BeaconState.more y" \<close>
 
 definition plus_BeaconState_ext :: "'a BeaconState_scheme \<Rightarrow> 'a BeaconState_scheme \<Rightarrow> 'a BeaconState_scheme" 
+  where "plus_BeaconState_ext x y == x"
+
+text \<open>definition plus_BeaconState_ext :: "'a BeaconState_scheme \<Rightarrow> 'a BeaconState_scheme \<Rightarrow> 'a BeaconState_scheme" 
   where "plus_BeaconState_ext x y == 
   \<lparr> genesis_time_f = genesis_time_f x + genesis_time_f y,
   genesis_validators_root_f = genesis_validators_root_f x + genesis_validators_root_f y, 
@@ -172,7 +254,7 @@ definition plus_BeaconState_ext :: "'a BeaconState_scheme \<Rightarrow> 'a Beaco
   next_withdrawal_index_f = next_withdrawal_index_f x + next_withdrawal_index_f y, 
   next_withdrawal_validator_index_f = next_withdrawal_validator_index_f x + next_withdrawal_validator_index_f y,
   historical_summaries_f = historical_summaries_f x + historical_summaries_f y, 
-  \<dots> = BeaconState.more x + BeaconState.more y \<rparr>"
+  \<dots> = BeaconState.more x + BeaconState.more y \<rparr>"\<close>
 
 definition "zero_BeaconState_ext \<equiv> \<lparr> genesis_time_f = None,
   genesis_validators_root_f = None, 
@@ -205,10 +287,23 @@ definition "zero_BeaconState_ext \<equiv> \<lparr> genesis_time_f = None,
 instance
 
   apply (standard; (clarsimp simp: plus_BeaconState_ext_def sep_disj_BeaconState_ext_def zero_BeaconState_ext_def)?)
-     apply (clarsimp simp: sep_disj_commute)
+  sorry
+      apply (clarsimp simp: sep_disj_commute)
+  apply (simp add: sep_disj_commute)
     apply (metis sep_add_commute)
    apply (intro conjI; metis sep_add_assoc)
   apply (safe; clarsimp)
+  done
+end
+
+instantiation BeaconState_ext :: (cancellative_sep_algebra) cancellative_sep_algebra begin
+
+find_theorems name: BeaconState "(?x :: 'e BeaconState_ext) = ?y" historical_roots_f_update
+instance
+  apply (standard; (clarsimp simp: plus_BeaconState_ext_def sep_disj_BeaconState_ext_def zero_BeaconState_ext_def)?)
+  apply (simp add: sep_disj_positive)
+  apply (rule BeaconState.equality; clarsimp?)
+  using Extended_Separation_Algebra.cancellative_sep_algebra_class.sep_add_cancelD apply blast+
   done
 end
 
@@ -218,11 +313,26 @@ end
 
 locale hoare_logic = verified_con + strong_spec begin
 
-
 definition "hoare_triple P f Q \<equiv>   run f \<le> assert (Collect P); spec (UNIV \<triangleright> (Collect Q)) "
 
-
 notation hoare_triple ("\<lblot>_\<rblot> _ \<lblot>_\<rblot>")
+
+lemma hoare_strengthen_post: "hoare_triple P f Q' \<Longrightarrow> Q' \<le> Q \<Longrightarrow> hoare_triple P f Q"
+  apply (clarsimp simp: hoare_triple_def le_fun_def)
+  apply (rule order_trans)
+   apply (assumption)
+  apply (rule seq_mono)
+  using assert_iso apply blast
+  apply (rule spec_strengthen)
+  by (simp add: Collect_mono_iff range_restrict_p_mono)
+
+lemma hoare_weaken_pre: "hoare_triple P' f Q \<Longrightarrow> P \<le> P' \<Longrightarrow> hoare_triple P f Q"
+  apply (clarsimp simp: hoare_triple_def)
+  apply (rule order_trans)
+   apply (assumption)
+  apply (rule seq_mono)
+  using assert_iso apply blast
+  by (clarsimp)
 
 
 lemma setState_spec: "(run (setState s)) \<le> spec (UNIV \<triangleright> {s}) "
@@ -426,10 +536,11 @@ lemma restrict_domain_UNIV[simp]: "UNIV \<triangleleft> R = R "
 
 
 
-lemmas bind_assoc =  kcomp_assoc[simplified k_comp_def]
 
-lemma bindCont_assoc: "bindCont f (\<lambda>a. bindCont (g a) h) = bindCont (bindCont f g) h"
-  by (clarsimp simp: bindCont_def)
+
+lemma return_triple'[wp]: "(\<lblot>P\<rblot> (C v) \<lblot>Q\<rblot>) \<Longrightarrow> \<lblot>P\<rblot> (bindCont (return v) C) \<lblot>Q\<rblot>"
+  apply (clarsimp simp: bindCont_return')
+  done
 
 
 lemma if_seq: 
@@ -468,7 +579,7 @@ lemma "x \<in> S \<triangleleft> R \<longleftrightarrow> fst x \<in> S \<and> x 
 
 definition "wf_lens l \<longleftrightarrow> (\<forall>s v. get l (set l s v) = v)"
 
-definition "maps_to l v s \<equiv> wf_lens l \<and> get l (fst s) = Some v" 
+text \<open>definition "maps_to l v s \<equiv> wf_lens l \<and> get l (fst s) = Some v \<and> valid l (Some v)" \<close>
 
 lemma restrict_UNIV_times: "P \<triangleleft> (UNIV \<times> R) = (P \<times> R)"
   by (safe; clarsimp)
@@ -476,27 +587,124 @@ lemma restrict_UNIV_times: "P \<triangleleft> (UNIV \<times> R) = (P \<times> R)
 lemma spec_ref_pgm':"R \<subseteq> R' \<Longrightarrow> pgm R \<le> spec R'"
   by (meson dual_order.trans pgm.hom_mono spec_ref_pgm)
 
-lemma write_beacon_sep: "hoare_triple ( (maps_to l v \<and>* R)) (write_beacon l v') ( (maps_to l v' \<and>* R))"
+lemma test_botI: "S = {} \<Longrightarrow> test S = \<bottom>"
+  by (clarsimp)
+
+abbreviation "write l v \<equiv> (\<lambda>s. lens.set l s v)"
+
+lemma valid_write_write: 
+ "valid_lens l \<Longrightarrow> write l v o (write l v') = write l v"
+  apply (clarsimp simp: valid_lens_def)
+  apply (clarsimp simp: set_set_def)
+  apply (intro ext; clarsimp)
+  done
+         
+thm maps_to_def
+
+definition "lens_pset l v  = Abs_p_set (Pair ({f. (\<exists>v. (\<lambda>s. set l s v) = f)} \<union> {id}) (\<lambda>s. set l s (Some v)))"
+
+declare [[show_types=false]]
+
+
+lemma set_of_lens_pset: "set_of (lens_pset l v) = {f. (\<exists>v. (\<lambda>s. set l s v) = f)} \<union> {id} "
+  apply (clarsimp simp: lens_pset_def set_of_def)
+  apply (subst Abs_p_set_inverse)
+   apply (clarsimp)
+   apply (blast)
+  apply (clarsimp)
+  done
+
+lemma point_of_lens_pset: "point_of (lens_pset l v) = (\<lambda>s. set l s (Some v)) "
+  apply (clarsimp simp: lens_pset_def point_of_def)
+  apply (subst Abs_p_set_inverse)
+   apply (clarsimp)
+   apply (blast)
+  apply (clarsimp)
+  done
+
+lemmas lens_pset_simps = set_of_lens_pset point_of_lens_pset
+
+lemma maps_to_lens_pset[simp]: "valid_lens l \<Longrightarrow> maps_to l v' (lens_pset l v')"
+  by (clarsimp simp: maps_to_def lens_pset_simps)
+
+lemma maps_to_lens_pset'[simp]: "maps_to l v s \<Longrightarrow> maps_to l v' (lens_pset l v')"
+  by (clarsimp simp: maps_to_def lens_pset_simps)
+
+lemma maps_point_simp: "maps_to l v s \<Longrightarrow> point_of s = (\<lambda>s. set l s (Some v))"
+  by (clarsimp simp: maps_to_def)
+
+lemma write_beacon_sep: " hoare_triple ( lift (maps_to l v \<and>* R)) (write_beacon l v') ( lift (maps_to l v' \<and>* R))"
   apply (clarsimp simp: hoare_triple_def run_def write_beacon_def bindCont_def getState_def Sup_le_iff)
   apply (intro conjI impI)
    apply (clarsimp simp: assert_galois_test)
    apply (clarsimp simp: seq_assoc[symmetric] test_seq_test)
    apply (clarsimp simp: fail_def)
-   apply (subgoal_tac "\<tau> (Collect (maps_to l v \<and>* R)) \<sqinter> \<tau> {(a, b)} = \<bottom>"; clarsimp?)
+   apply (subgoal_tac "\<tau> (Collect (lift (maps_to l v \<and>* R))) \<sqinter> \<tau> {(a, b)} = \<bottom>"; clarsimp?)
    defer
    apply (clarsimp)
    apply (clarsimp simp: assert_galois_test seq_assoc[symmetric] test_seq_test setState_def pgm_test_pre domain_restrict_twice )
    apply (clarsimp simp: restrict_UNIV_times)
    apply (rule spec_ref_pgm')
    apply (clarsimp)
-  sorry
+   apply (clarsimp simp: sep_conj_def)
+  using [[show_types=false]]
+   apply (clarsimp simp: lift_def)
+   apply (rule_tac x= "lens_pset l v' + ya" in exI)
+   apply (intro conjI)
+    apply (rule_tac x="lens_pset l v'" in exI)
+    apply (rule_tac x=ya in exI)
+  apply (intro conjI)(*
+   apply (clarsimp simp: plus_domain_pair_def sep_disj_domain_pair_def sep_disj_BeaconState_ext_def)
+   apply  (rule_tac x="Pair _ (write l (Some v')  o state_of ya)" in exI) 
+   apply (intro conjI)
+    apply (rule_tac x="Pair {f. (\<exists>v. (\<lambda>s. set l s v) = f)} (\<lambda>s. set l  s (Some v'))" in exI)
+    apply (rule_tac x=ya in exI)
+    apply (intro conjI)*)
 
+       apply (clarsimp simp: disj_cylindric_set_def sep_disj_p_set_def set_of_lens_pset)
+       apply (intro conjI; clarsimp?)
+         apply (clarsimp simp: maps_to_def)
+         apply blast
+      apply (clarsimp simp: maps_to_def)
+  apply (clarsimp)
+    apply blast
+  find_theorems name:plus name:simps
+  apply (clarsimp simp: plus_p_simps lens_pset_simps)
 
+   apply (clarsimp simp: disj_cylindric_set_def sep_disj_p_set_def)
+   apply (clarsimp simp: maps_point_simp)
+  apply (smt (verit) comp_eq_elim maps_to_def point_in_set set_set_def valid_lens_def)
+(*    apply (frule_tac x="(\<lambda>s. lens.set l s (Some v')) o (\<lambda>s. lens.set l  s (Some v))" in bspec)
+   apply (drule mp)
+    apply (rule_tac x="(Some v')" in exI)
+  apply (clarsimp simp: valid_write_write)
+  
+   apply (clarsimp)
+   apply (clarsimp simp: comp_assoc)
+   apply (subst comp_apply[where f="state_of _" and g="write l (Some _)", symmetric])
+   apply (subst comp_apply[where f="write l (Some _)", symmetric]) back back back
+   apply (subgoal_tac "(state_of ya \<circ> (\<lambda>s. lens.set l s (Some v'))) = (write l (Some v') o (write l (Some v)) o state_of ya)")
+    apply (simp only:)
+    apply (subst comp_apply)+
+    apply (clarsimp)
+    apply (clarsimp simp: comp_assoc)
+    apply (simp add: set_set_def valid_lens_def)
+  apply (subst valid_write_write, assumption)
+  apply metis
 
+  apply (clarsimp simp: )
+    *)
+  apply (subst inf.test_sync_to_inf)
+  apply (rule test_botI)
+  apply (clarsimp)
+  apply (clarsimp simp: lift_def sep_conj_def maps_to_def)
+  apply (clarsimp simp: plus_p_simps)
+  by (metis get_set_def option.distinct(1) valid_lens_def)
+ 
 
 abbreviation (input) "member S \<equiv> (\<lambda>x. x \<in> S)"
 
-lemma run_read_beacon_split[simp]: "run (bindCont (read l) c) = ((run (read l)) ; (\<Squnion>x. \<tau> {s. get l (fst s) = Some x}  ; run (c x)))"
+lemma run_read_beacon_split[simp]: "run (bindCont (read_beacon l) c) = ((run (read l)) ; (\<Squnion>x. \<tau> {s. get l s = Some x}  ; run (c x)))"
   apply (clarsimp simp: run_def bindCont_def read_beacon_def getState_def return_def Nondet_seq_distrib split: if_splits )
   apply (rule antisym; (clarsimp simp: Sup_le_iff Nondet_seq_distrib)?)
    apply (safe; (clarsimp split: if_splits)?)
@@ -590,40 +798,55 @@ lemma hoare_chain': "Q \<subseteq> P' \<Longrightarrow>
   apply (clarsimp)
   done
 
+declare [[show_types=false]]
 
+lemma lift_mono: "lift P s \<Longrightarrow> P \<le> Q \<Longrightarrow> lift Q s"
+  apply (clarsimp simp: lift_def)
+  by blast
 
-lemma write_beacon_wp[wp]: "hoare_triple ( P) (c ()) Q \<Longrightarrow> hoare_triple ( (maps_to l v \<and>* (maps_to l v' \<longrightarrow>* P))) (do {x <- write_beacon l v' ; c x}) ( Q)"
+lemma write_beacon_wp[wp]: "hoare_triple (lift P) (c ()) Q \<Longrightarrow> hoare_triple (lift (maps_to l v \<and>* (maps_to l  v' \<longrightarrow>* P))) (do {x <- write_beacon l v' ; c x}) ( Q)"
   apply (clarsimp simp: hoare_triple_def)
   apply (rule order_trans)
    apply (rule seq_mono)
-    apply (rule write_beacon_sep[simplified hoare_triple_def, where R="(maps_to l v' \<longrightarrow>* P)"], assumption)
-  apply (clarsimp simp: restrict_range_UNIV)
-  apply (rule hoare_chain', clarsimp)
+    apply (rule write_beacon_sep[simplified hoare_triple_def, where R="(maps_to l v' \<longrightarrow>* P)"])
+ 
+  apply (assumption)
+  apply (clarsimp simp: )
+     apply (rule hoare_chain', clarsimp)
+  apply (erule lift_mono, clarsimp)
+  apply (sep_mp)
   apply (sep_solve)
   done
 
 
 
 
-lemma read_sep: " hoare_triple ( (maps_to l v \<and>* R)) (read l) ( (maps_to l v \<and>* R))"
+lemma read_sep: " hoare_triple ( lift (maps_to l v \<and>* R)) (read l) ( lift (maps_to l  v \<and>* R))"
   apply (clarsimp simp: hoare_triple_def run_def read_beacon_def bindCont_def getState_def Sup_le_iff, safe)
    apply (clarsimp simp: fail_def assert_galois_test)
    defer
    apply (clarsimp simp: return_def)
    apply (metis assert_galois_test nil_ref_test restrict_range_UNIV seq_mono 
    seq_mono_left seq_nil_left spec_test_restricts spec_univ term_nil test_seq_commute)
-  apply (subgoal_tac "\<tau> (Collect (maps_to l v \<and>* R)) ; \<tau> {(a, b)} \<le> \<bottom>")
-  apply (metis bot.extremum inf.absorb_iff2 inf_bot_left seq_assoc seq_magic_left)
-  sorry
+  apply (subgoal_tac "\<tau> (Collect (lift (maps_to l v \<and>* R))) ; \<tau> {(a, b)} \<le> \<bottom>")
+   apply (metis bot.extremum inf.absorb_iff2 inf_bot_left seq_assoc seq_magic_left)
+  apply (subst test_seq_test)
+  apply (subgoal_tac "(Collect (lift (maps_to l v \<and>* R)) \<inter> {(a, b)}) = {}"; clarsimp)
+  apply (clarsimp simp: sep_conj_def lift_def maps_to_def)
+  apply (clarsimp simp: plus_p_simps)
+  by (metis get_set_def option.distinct(1) valid_lens_def)
+
+
+
 
 lemma times_restrict_range[simp]: "(UNIV \<times> P) \<triangleright> Q = (UNIV \<times> (P \<inter> Q))"
   by (safe; (clarsimp simp: restrict_range_def)?)
 
-lemma maps_to_get_wf:"(maps_to l v \<and>* R) (a, b) \<Longrightarrow> get l a = Some v"
+lemma maps_to_get_wf:"lift (maps_to l v \<and>* R) (a, b) \<Longrightarrow> get l (a, b) = (Some v)"
   apply (clarsimp simp: sep_conj_def maps_to_def)
   sorry
 
-lemma read_beacon_wp[wp]: "(\<And>a. hoare_triple ( P a) (c a) (Q )) \<Longrightarrow> hoare_triple ( (maps_to l v \<and>* (maps_to l v \<longrightarrow>*  (P v )))) (do {v <- read_beacon l ; c v}) (Q  )"
+lemma read_beacon_wp[wp]: "(\<And>a. hoare_triple (lift  (P a)) (c a) (Q )) \<Longrightarrow> hoare_triple ( lift (maps_to l  v \<and>* (maps_to l  v \<longrightarrow>*  (P  v )))) (do {v <- read_beacon l ; c v}) (Q  )"
   apply (clarsimp simp: hoare_triple_def bindCont_def run_def read_beacon_def getState_def )
   apply (clarsimp simp: Sup_le_iff)
   apply (safe)
@@ -634,8 +857,10 @@ lemma read_beacon_wp[wp]: "(\<And>a. hoare_triple ( P a) (c a) (Q )) \<Longright
     apply (subst seq_assoc[symmetric])
     apply (subst test_seq_test)
     apply (rule order_trans, rule seq_mono_left)
-     apply (rule test.hom_mono[where p="Collect (P v)"])
+     apply (rule test.hom_mono[where p="Collect (lift (P  v))"])
      apply (clarsimp)
+  apply (erule lift_mono, clarsimp)
+
      apply (sep_solve)
     apply (blast)
   apply (subst seq_assoc[symmetric])
@@ -681,41 +906,30 @@ lemma return_wp: "hoare_triple P (return c) P"
 
 
 
-lemma hoare_strengthen_post: "hoare_triple P f Q' \<Longrightarrow> Q' \<le> Q \<Longrightarrow> hoare_triple P f Q"
-  apply (clarsimp simp: hoare_triple_def le_fun_def)
-  apply (rule order_trans)
-   apply (assumption)
-  apply (rule seq_mono)
-  using assert_iso apply blast
-  apply (rule spec_strengthen)
-  by (fastforce)
-
-lemma hoare_weaken_pre: "hoare_triple P' f Q \<Longrightarrow> P \<le> P' \<Longrightarrow> hoare_triple P f Q"
-  apply (clarsimp simp: hoare_triple_def)
-  apply (rule order_trans)
-   apply (assumption)
-  apply (rule seq_mono)
-  using assert_iso apply blast
-  by (clarsimp)
-
-lemma swap_sep: "hoare_triple ( (maps_to l v \<and>* maps_to l' v' \<and>* R)) (swap l l') ( (maps_to l v' \<and>* maps_to l' v \<and>* R) )"
+lemma swap_sep: "hoare_triple (lift (maps_to l  v \<and>* maps_to l'  v' \<and>* R)) (swap l l') ( lift (maps_to l  v' \<and>* maps_to l'  v \<and>* R) )"
   apply (clarsimp simp: swap_def)
   apply (rule hoare_weaken_pre)
    apply (rule read_beacon_wp)
-  apply (rule read_beacon_wp[where v=v'])
+  thm read_beacon_wp
+  thm wp
+   apply (rule read_beacon_wp[where v="v'"])
+  apply (rule write_beacon_wp)
    apply (rule wp )+
-  apply (rule  wp[where c=return, simplified bindCont_return, OF return_wp])
+  apply (rule  write_beacon_wp[where c=return, simplified bindCont_return, OF return_wp])
   apply (clarsimp)
-   apply (sep_solve)
+  apply (erule lift_mono, clarsimp)
+  apply (sep_solve)
   done
 
-lemma swap_wp: "hoare_triple ( P) (c ()) Q  \<Longrightarrow> hoare_triple ( (maps_to l v \<and>* maps_to l' v' \<and>* (maps_to l v' \<and>* maps_to l' v \<longrightarrow>* P))) (do {x <- swap l l'; c x}) (Q)"
+lemma swap_wp: "hoare_triple ( lift P) (c ()) Q  \<Longrightarrow> hoare_triple (lift (maps_to l  v \<and>* maps_to l' v' \<and>* (maps_to l v' \<and>* maps_to l'  v \<longrightarrow>* P))) (do {x <- swap l l'; c x}) (Q)"
   apply (clarsimp simp: swap_def)
   apply (rule hoare_anti_mono)
     apply (clarsimp simp: bindCont_assoc[symmetric])
    apply (rule wp )+
   apply (assumption)
-  apply (clarsimp)
+   apply (clarsimp)
+  apply (erule lift_mono, clarsimp)
+
   apply (sep_cancel)+
    apply (sep_solve)
   apply (clarsimp)
@@ -731,13 +945,17 @@ method wp = ((simp only: bindCont_assoc[symmetric] bindCont_return')?,
        (rule wp return_wp wp[THEN return_triple]) | assumption )+ 
 
 
-lemma add_fields_wp: "(\<And>a. hoare_triple ( (P a)) (c a) (Q))  \<Longrightarrow>
-    hoare_triple ( (maps_to l v \<and>* maps_to l' v' \<and>* (maps_to l v \<and>* maps_to l' v' \<longrightarrow>* P (v + v'))))
+lemma add_fields_wp: "(\<And>a. hoare_triple (lift (P a)) (c a) (Q))  \<Longrightarrow>
+    hoare_triple (lift (maps_to l  v \<and>* maps_to l'  v' \<and>* (maps_to l  v \<and>* maps_to l'  v' \<longrightarrow>* P (v + v'))))
          (do {x <- add_fields l l'; c x}) (Q )"
   apply (clarsimp simp: add_fields_def)
   apply (rule hoare_weaken_pre)
-    apply (wp)
-  by (clarsimp, sep_cancel+, sep_solve)
+   apply (wp)
+  apply (clarsimp)
+  apply (erule lift_mono, clarsimp)
+  by ( sep_cancel+, sep_solve)
+
+
 
 
 thm swap_wp[where c=return, simplified bindCont_return]
@@ -756,7 +974,7 @@ lemma if_wp[wp]:
   apply (clarsimp split: if_splits)
   done
 
-lemma inf_spec: " \<Inter> (range P) \<le> P (a, b)"
+lemma inf_spec: " \<Inter> (Set.range P) \<le> P (a, b)"
   apply (clarsimp)
   done
 
@@ -811,7 +1029,7 @@ lemma assert_wp[wp]:
 
 
 
-lemma "hoare_triple ( (maps_to a x \<and>* maps_to b y \<and>* maps_to c z)) (set_max a b c) ( (maps_to a x \<and>* maps_to b y \<and>* maps_to c (max x y)))"
+(* lemma "hoare_triple ( (maps_to a x \<and>* maps_to b y \<and>* maps_to c z)) (set_max a b c) ( (maps_to a x \<and>* maps_to b y \<and>* maps_to c (max x y)))"
   apply (clarsimp simp: set_max_def)
   apply (rule hoare_weaken_pre)
    apply (wp)
@@ -824,11 +1042,12 @@ lemma "hoare_triple ( (maps_to a x \<and>* maps_to b y \<and>* maps_to c z)) (se
    apply (sep_cancel)+
   apply (clarsimp simp: max_def)
   done
+*)
 
 
 lemma add_wp[wp]: "hoare_triple (P (n + m)) (c (n + m)) Q \<Longrightarrow>
   hoare_triple (\<lambda>s. n \<le> n + m \<and> (n \<le> n + m \<longrightarrow> P (n + m) s)) 
-(do {x <- (n .+ m); c x}) Q"
+(do {x <- (word_unsigned_add n  m); c x}) Q"
   apply (rule hoare_weaken_pre)
    apply (clarsimp simp:  word_unsigned_add_def )
    apply (simp only: Let_unfold)
@@ -880,6 +1099,105 @@ lemma vector_index_wp[wp]: "hoare_triple (P (vector_inner v ! unat i)) (c (vecto
   apply safe
   apply (case_tac v)
   by (fastforce simp: vector_inner_def intro!: unat_ucast_less_no_overflow)
+
+declare bindCont_return[simp] bindCont_return'[simp]
+
+lemma mapM_append_single[simp]: "mapM c (xs @ [x]) = (do {vs <- mapM c xs; v <- c x; return (vs @ [v])})"
+  apply (induct xs; clarsimp)
+  apply (clarsimp simp: bindCont_assoc[symmetric])
+  done
+
+
+lemma mapM_wp:
+  assumes c_wp: "\<And>(f :: 'e \<Rightarrow> ('f, 'a) cont) x P Q. hoare_triple P (f (g x)) Q \<Longrightarrow> hoare_triple (pre P x) (do { b <- c x; f b}) Q"  
+  assumes pre_mono: "(\<And>x P Q s . (P s  \<Longrightarrow> Q s) \<Longrightarrow> pre P x s \<Longrightarrow> pre Q x s  )"
+shows " hoare_triple P (f (map g xs)) Q \<Longrightarrow>   hoare_triple (\<lambda>s. (\<Sqinter>x\<in>(list.set xs). pre P x) s \<and> ((\<Sqinter>x\<in>(list.set xs). pre P x) s \<longrightarrow> P s)) (do {vs <- mapM c (xs :: 'd list) ; (f :: 'e list \<Rightarrow> ('f, 'a) cont) (vs )}) Q"
+  apply (induct xs arbitrary: f; clarsimp)
+  apply (atomize)
+  apply (clarsimp simp: bindCont_assoc[symmetric])
+  apply (rule hoare_weaken_pre)
+  apply (rule c_wp)
+  apply (erule allE)
+  apply (erule impE)
+   defer
+    apply (assumption)
+  apply (clarsimp)
+   apply (rule pre_mono[rotated], assumption)
+    apply (clarsimp)
+  apply (clarsimp)
+  done
+
+lemma hoare_assert_stateI:"(\<And>s. P s \<Longrightarrow> hoare_triple (\<lambda>s'. s = s') f Q) \<Longrightarrow> hoare_triple P f Q"
+  apply (clarsimp simp: hoare_triple_def assert_galois_test)
+  apply (subst test_split)
+  apply (subst Nondet_seq_distrib)
+  apply (subst Sup_le_iff)
+  apply (clarsimp)
+  done
+
+lemma hoare_eqI: "hoare_triple (P x) (f x) Q \<Longrightarrow> hoare_triple (\<lambda>s. P x s \<and> v = x) (f v) Q"
+  apply (rule hoare_assert_stateI)
+  apply (clarsimp)
+  apply (erule hoare_weaken_pre, clarsimp)
+  done
+
+lemma hoare_eqI': "hoare_triple (lift (P x)) (f x) Q \<Longrightarrow> hoare_triple (lift (\<lambda>s. P x s \<and> v = x)) (f v) Q"
+  apply (rule hoare_assert_stateI)
+  apply (clarsimp)
+  apply (clarsimp simp: lift_def)
+  apply (erule hoare_weaken_pre)
+  apply (clarsimp simp: lift_def)
+  apply (blast)
+  done
+
+
+definition "in_set P c \<equiv> \<forall>s. (point_of c) s = s \<longrightarrow> P s"
+
+lemma [simp]: "in_set (\<lambda>c. True) s" by (clarsimp simp: in_set_def)
+
+lemma assert_wp'[wp]: 
+  "hoare_triple ( lift P) (c ()) Q \<Longrightarrow>
+   hoare_triple ( lift (\<lambda>x. (in_set C x \<longrightarrow> P x) \<and> in_set C x))  (do {x <- (assertion C); c x}) Q"
+  apply (clarsimp split: if_splits)
+  apply (clarsimp simp: assertion_def)
+  apply (rule hoare_weaken_pre)
+   apply (wp)
+  apply (safe)
+  apply (clarsimp)
+  apply (intro conjI)
+   apply (clarsimp simp: lift_def)
+   apply (blast)
+  apply (clarsimp simp: lift_def in_set_def)
+  done
+
+
+lemma select_wp[wp]: "(\<And>x. x \<in> P \<Longrightarrow> hoare_triple (pre x) (f x) Q) \<Longrightarrow> hoare_triple (\<lambda>s. \<forall>x\<in>P. pre x s) (do {x <- select P; f x}) Q"
+  apply (clarsimp simp: select_def bindCont_def hoare_triple_def run_def)
+  apply (subst Sup_le_iff)
+  apply (clarsimp)
+  apply (atomize, erule allE, drule mp, assumption)
+  apply (erule order_trans)
+  by (metis (mono_tags, lifting) Collect_mono assert_iso seq_mono_left)
+
+
+
+lemma angel_wp[wp]: "  x \<in> P \<Longrightarrow>  hoare_triple (pre x) (f x) Q \<Longrightarrow> hoare_triple (\<lambda>s. pre x s) (do {x <- angel P; f x}) Q"
+  apply (clarsimp simp: angel_def bindCont_def hoare_triple_def run_def)
+  apply (rule INF_lower2, assumption)
+  apply (clarsimp)
+  done
+
+lemma select_wp_lift[wp]: "(\<And>x. x \<in> P \<Longrightarrow> hoare_triple (lift (pre x)) (f x) Q) \<Longrightarrow> hoare_triple (lift (\<lambda>s. \<forall>x\<in>P. pre x s)) (do {x <- select P; f x}) Q"
+  apply (clarsimp simp: select_def bindCont_def hoare_triple_def run_def)
+  apply (subst Sup_le_iff)
+  apply (clarsimp)
+  apply (atomize, erule allE, drule mp, assumption)
+  apply (erule order_trans)
+  apply (rule seq_mono_left)
+  apply (subst assert_iso[symmetric], clarsimp)
+  apply (clarsimp simp: lift_def)
+  by auto
+>>>>>>> cf2fef3 (Added new separation algebra, data refinement framework, specs for optimised processing)
 
 end
 

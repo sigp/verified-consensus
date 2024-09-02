@@ -103,12 +103,13 @@ proof -
   finally show ?thesis .
 qed
 
-abbreviation P' :: "'b set \<Rightarrow> 'b rel" where
+(* abbreviation P' :: "'b set \<Rightarrow> 'b rel" where
 "P' p \<equiv> {(k, k'). k \<in> p \<longrightarrow> k' \<in> p}"
+*)
 
 definition
 guar_inv :: "('state set) \<Rightarrow> 'a" where
-"guar_inv p = (guar (P' p))"
+"guar_inv p = (guar {(k, k'). k \<in> p \<longrightarrow> k' \<in> p})"
 
 (*
 

@@ -1,6 +1,7 @@
 theory Cont_Monad_Algebra
  imports "algebra/rg-algebra/AbstractAtomicTest/Constrained_Atomic_Commands" "HOL-Library.Monad_Syntax"
-begin                                                                                     
+begin         
+
 
 definition bindCont :: "(('a \<Rightarrow> 'r) \<Rightarrow> 'r) \<Rightarrow> ('a \<Rightarrow> ('b \<Rightarrow> 'r) \<Rightarrow> 'r) \<Rightarrow> ('b \<Rightarrow> 'r) \<Rightarrow> 'r" (infixl "\<bind>" 54)
 where
@@ -15,7 +16,7 @@ type_notation cont (infixr "\<leadsto>" 10)
 definition callCC :: "(('a \<Rightarrow> ('b, 'r) cont) \<Rightarrow> ('a, 'r) cont) \<Rightarrow> ('a, 'r) cont"
   where "callCC f \<equiv> \<lambda>cc. f (\<lambda>a _. cc a) cc "
 
-definition liftM :: "('a \<Rightarrow> 'b) \<Rightarrow> ('a, 'r) cont \<Rightarrow> ('b, 'r) cont" where
+definition liftM  :: "('a \<Rightarrow> 'b) \<Rightarrow> ('a, 'r) cont \<Rightarrow> ('b, 'r) cont" (infixl "<$>" 50) where
   "liftM f m = bindCont m (return o f)"
 
 definition k_comp :: "('a \<Rightarrow> ('b, 'r) cont) =>  ('b \<Rightarrow> ('c, 'r) cont) => ('a \<Rightarrow> ('c, 'r) cont)" where 
@@ -24,10 +25,6 @@ definition k_comp :: "('a \<Rightarrow> ('b, 'r) cont) =>  ('b \<Rightarrow> ('c
 definition foldrM :: "('a \<Rightarrow> 'b \<Rightarrow> ('b, 'r) cont) \<Rightarrow> 'a list \<Rightarrow> 'b \<Rightarrow> ('b, 'r) cont" where
   "foldrM f xs = foldr (k_comp) (map f xs) (return)"
 
-(*
- * FIXME
- *"mapM f xs = foldrM (\<lambda>a xs. liftM (\<lambda>x. x # xs) f a) xs []"
- *)
 
 adhoc_overloading bind bindCont
 
@@ -58,10 +55,12 @@ context constrained_atomic begin
 
 definition "select S f \<equiv> \<Squnion>x\<in>S. f x"  
 
+definition "angel S f \<equiv> \<Sqinter>x\<in>S. f x"
+
+
 definition "getState f \<equiv>  (\<Squnion>a. \<tau> {a} ; f a)  "   
 
 definition "setState s f \<equiv>  (\<pi> (UNIV \<triangleright> {s}) ; f () )"   
-
 
 
 definition "modifyState f = do { a <- (getState);  (setState (f a))}"
@@ -143,6 +142,35 @@ lemma "run (assertion (\<lambda>_. False)) = \<top>"
   by (metis NONDET_seq_distrib Nondet_test_nil order_top_class.top_greatest seq_nil_left)
 
 definition "compact c \<longleftrightarrow> (\<forall>S. S \<noteq> {} \<longrightarrow>  c \<le> \<Squnion> S \<longrightarrow> (\<exists>s\<in>S. c \<le> s))"
+
+lemma foldrM_empty[simp]: "foldrM f [] x = return (x)" by (clarsimp simp: foldrM_def)
+
+
+lemma foldrM_cons: "foldrM f (x # xs) v = do {y <- f x v; foldrM f xs y}"
+  by (clarsimp simp: foldrM_def k_comp_def)
+
+lemmas bind_assoc =  kcomp_assoc[simplified k_comp_def]
+
+lemma bindCont_assoc: "bindCont f (\<lambda>a. bindCont (g a) h) = bindCont (bindCont f g) h"
+  by (clarsimp simp: bindCont_def)
+
+lemma foldrM_append: "foldrM f (xs@ys) n = do {v <- foldrM f (xs) n; foldrM f ys v}"
+  apply (induct xs arbitrary: n; clarsimp simp: bindCont_return bindCont_return')
+  apply (clarsimp simp: foldrM_cons bindCont_return bindCont_return' )
+  by (simp add: bindCont_assoc bindCont_return bindCont_return')
+
+lemma bindCont_right_eqI: "(\<And>x. c x = d x) \<Longrightarrow> bindCont f c = (bindCont f d)"
+  apply (intro ext; clarsimp simp: bindCont_def)
+  done
+
+lemma  bindCont_fail_absorb [simp]: "(bindCont fail c) = fail"
+  apply (clarsimp simp: bindCont_def fail_def)
+  apply (rule ext)
+  apply (clarsimp simp: fail_def)
+  done
+
+lemma fail_absorb_left[simp]: " (bindCont fail c) = fail"
+  by (intro ext; clarsimp simp: fail_def bindCont_def)
 
 lemma algebraic: "(x :: 'a) = \<Squnion>{y. y \<le> x \<and> compact y}" sorry
 

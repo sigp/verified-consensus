@@ -12,7 +12,7 @@ type_synonym u64 = "64 word"
 type_synonym u256 = "256 word"
 type_synonym ExecutionAddress = "160 word"
 datatype Slot = Slot u64
-datatype Epoch = Epoch u64
+datatype Epoch = Epoch (raw_epoch: u64)
 
 datatype Hash256 = Hash256 "u8 list"
 datatype 'a Vector = Vector "'a list"
@@ -51,7 +51,7 @@ record Validator =
   exit_epoch_f :: Epoch
   withdrawable_epoch_f :: Epoch
 
-datatype ParticipationFlags = ParticipationFlags "bool list"
+datatype ParticipationFlags = ParticipationFlags (participation_flag_weights: "bool list")
 
 record Checkpoint =
   epoch_f :: Epoch

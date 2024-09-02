@@ -262,11 +262,7 @@ lemma rely_restrict_galois_reverse:            (* Theorem 3 reverse: when does i
 proof -
   assume a1: "c \<ge> (restrict r)\<^sup>\<omega> \<iinter> d"
   then have a2: "(rely r) \<iinter> c \<ge> (restrict r)\<^sup>\<omega> \<iinter> (rely r) \<iinter> d"
-<<<<<<< HEAD
-    by (metis (no_types, opaque_lifting) conj.sync_assoc conj.sync_commute conj.sync_mono_left) 
-=======
     by (metis (no_types) conj.sync_assoc conj.sync_commute conj.sync_mono_left) 
->>>>>>> a87ff0585792b159a497ae6dae5b85c93f31726d
   then have a3: "(rely r) \<iinter> c \<ge> (restrict r)\<^sup>\<omega> \<iinter> d"
     using assms restrict_iter_conj_rely by auto
   thus ?thesis using d_normal a3 conj.sync_mono_left le_sup_iff 
