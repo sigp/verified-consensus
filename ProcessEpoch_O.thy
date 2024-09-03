@@ -594,14 +594,76 @@ definition "process_justification_and_finalization_fast" ::  "(unit, 'a) cont"
       
 }}"
 
+definition get_flag_attesting_balance :: "nat \<Rightarrow> Epoch \<Rightarrow> (u64, 'a) cont" 
+  where "get_flag_attesting_balance flag_index epoch = do {
+   unslashed_participating_indices <- get_unslashed_participating_indices flag_index epoch;
+   total_balance <- get_total_balance unslashed_participating_indices;
+   return undefined
+}"
+
+text \<open>
+def get_flag_attesting_balance(state: BeaconState, flag_index: int, epoch: Epoch) -> Gwei:
+    return get_total_balance(state, get_unslashed_participating_indices(state, flag_index, epoch))
+\<close>
+
 definition new_progressive_balances :: "(ProgressiveBalancesCache, 'a) cont"
-  where  "new_progressive_balances = return (undefined :: ProgressiveBalancesCache)"
+  where  "new_progressive_balances = do {
+  total_active_balance <- get_total_active_balance;
+  previous_epoch <- get_previous_epoch;
+  current_epoch <- get_current_epoch;
+  previous_epoch_flag_attesting_balances <- forM [TIMELY_SOURCE_FLAG_INDEX, TIMELY_TARGET_FLAG_INDEX, TIMELY_HEAD_FLAG_INDEX] (\<lambda>flag. get_flag_attesting_balance flag previous_epoch);
+  current_epoch_flag_attesting_balances <- forM [TIMELY_SOURCE_FLAG_INDEX, TIMELY_TARGET_FLAG_INDEX, TIMELY_HEAD_FLAG_INDEX] (\<lambda>flag. get_flag_attesting_balance flag current_epoch);
+  return (ProgressiveBalancesCache.fields total_active_balance previous_epoch_flag_attesting_balances
+                                          current_epoch_flag_attesting_balances :: ProgressiveBalancesCache)
+}"
+
+text \<open>def new_progressive_balances(state: BeaconState) -> ProgressiveBalancesCache:
+    total_active_balance = get_total_active_balance(state)
+    previous_epoch_flag_attesting_balances = [
+        get_flag_attesting_balance(state, TIMELY_SOURCE_FLAG_INDEX, previous_epoch),
+        get_flag_attesting_balance(state, TIMELY_TARGET_FLAG_INDEX, previous_epoch),
+        get_flag_attesting_balance(state, TIMELY_HEAD_FLAG_INDEX, previous_epoch),
+    ]
+    current_epoch_flag_attesting_balances = [
+        get_flag_attesting_balance(state, TIMELY_SOURCE_FLAG_INDEX, current_epoch),
+        get_flag_attesting_balance(state, TIMELY_TARGET_FLAG_INDEX, current_epoch),
+        get_flag_attesting_balance(state, TIMELY_HEAD_FLAG_INDEX, current_epoch),
+    ]
+    return ProgressiveBalancesCache(
+        total_active_balance=total_active_balance,
+        previous_epoch_flag_attesting_balances=previous_epoch_flag_attesting_balances,
+        current_epoch_flag_attesting_balances=current_epoch_flag_attesting_balances,
+    )
+\<close>
 
 definition new_base_rewards_cache :: "(BaseRewardsCache, 'a) cont" 
-  where "new_base_rewards_cache    = return (undefined :: BaseRewardsCache)"
+  where "new_base_rewards_cache    = do {
+ validators <- read validators;
+ let effective_balances = map Validator.effective_balance_f (var_list_inner validators);
+ base_rewards <- compute_base_rewards;
+ return (BaseRewardsCache.fields effective_balances base_rewards :: BaseRewardsCache)
+}"
+
+text \<open>
+def new_base_reward_cache(
+    state: BeaconState
+) -> BaseRewardCache:
+    effective_balances = [validator.effective_balance for validator in state.validators]
+    base_rewards = compute_base_rewards(state)
+    return BaseRewardCache(effective_balances=effective_balances, base_rewards=base_rewards)
+\<close>
 
 definition get_validator_churn_limit_fast :: "(u64, 'a) cont" 
-  where "get_validator_churn_limit_fast = undefined"
+  where "get_validator_churn_limit_fast = do {
+     num_active_validators <- read num_active_validators;
+     churn_limit <- word_unsigned_div num_active_validators (CHURN_LIMIT_QUOTIENT config);
+     return (max (MIN_PER_EPOCH_CHURN_LIMIT config) churn_limit)
+}"
+
+text \<open>def get_validator_churn_limit_fast(state: BeaconState) -> uint64:
+    return max(
+        MIN_PER_EPOCH_CHURN_LIMIT, state.num_active_validators // CHURN_LIMIT_QUOTIENT
+    )\<close>
 
 definition new_state_context :: "(StateContext, 'a) cont"
   where "new_state_context = do {
@@ -612,17 +674,119 @@ definition new_state_context :: "(StateContext, 'a) cont"
     return (StateContext.fields current_epoch next_epoch is_in_inactivity_leak churn_limit)
 }"
 
+
+
+(*FIXME where does total_balance come from? *)
 definition new_slashings_context :: "StateContext \<Rightarrow> (SlashingsContext, 'a) cont"
- where "new_slashings_context = undefined"
+  where "new_slashings_context state_ctxt = do {
+
+   xs <- read slashings;
+   total_slashings  <- safe_sum (vector_inner xs);
+   adjusted_total_slashing_balance <- total_slashings .* PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX;
+   total_balance <- get_total_active_balance;
+   let adjusted_total_slashing_balance = min adjusted_total_slashing_balance total_balance;
+   target_withdrawable_epoch <- raw_epoch (current_epoch_f state_ctxt) .+ (EPOCHS_PER_SLASHINGS_VECTOR config);
+   target_withdrawable_epoch <- word_unsigned_div target_withdrawable_epoch 2;
+   return (SlashingsContext.fields adjusted_total_slashing_balance (Epoch target_withdrawable_epoch))
+}"
+
+text \<open>
+def new_slashings_context(
+    state: BeaconState,
+    state_ctxt: StateContext,
+) -> SlashingsContext:
+    adjusted_total_slashing_balance = min(
+        sum(state.slashings) * PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX, total_balance
+    )
+    target_withdrawable_epoch = (
+        state_ctxt.current_epoch + EPOCHS_PER_SLASHINGS_VECTOR // 2
+    )
+    return SlashingsContext(
+        adjusted_total_slashing_balance=adjusted_total_slashing_balance,
+        target_withdrawable_epoch=target_withdrawable_epoch,
+    )
+\<close>
+
+definition unslashed_participating_increment :: "nat \<Rightarrow> (u64, 'a) cont"
+  where "unslashed_participating_increment flag_index = do {
+    previous_epoch_flag_attesting_balances <- previous_epoch_flag_attesting_balances_f <$> read progressive_balances_cache;
+    _ <- assertion (\<lambda>_. flag_index < length previous_epoch_flag_attesting_balances);
+    let unslashed_participating_balance = previous_epoch_flag_attesting_balances ! flag_index;
+    unslashed_participating_increment <- word_unsigned_div unslashed_participating_balance (EFFECTIVE_BALANCE_INCREMENT config);  
+    return unslashed_participating_increment
+}"
+
+text \<open>def unslashed_participating_increment(flag_index) -> Gwei:
+    unslashed_participating_balance = (
+        progressive_balances.previous_epoch_flag_attesting_balances[flag_index]
+    )
+    return unslashed_participating_balance // EFFECTIVE_BALANCE_INCREMENT\<close>
+
 
 definition new_rewards_and_penalties_context :: "ProgressiveBalancesCache \<Rightarrow> (RewardsAndPenaltiesContext, 'a) cont"
-  where "new_rewards_and_penalties_context = undefined"
+  where "new_rewards_and_penalties_context pbc = do {
+   unslashed_participating_increments_array <- mapM unslashed_participating_increment (range 0 (unat NUM_FLAG_INDICES) 1);
+   let total_active_balance = total_active_balance_f pbc;
+   active_increments <- word_unsigned_div  total_active_balance (EFFECTIVE_BALANCE_INCREMENT config);
+   return (RewardsAndPenaltiesContext.fields unslashed_participating_increments_array active_increments)
+}"
+
+text \<open>def new_rewards_and_penalties_context(
+    progressive_balances: ProgressiveBalancesCache,
+) -> RewardsAndPenaltiesContext:
+    unslashed_participating_increments_array = [
+        unslashed_participating_increment(flag_index)
+        for flag_index in range(NUM_FLAG_INDICES)
+    ]
+    active_increments = (
+        progressive_balances.total_active_balance // EFFECTIVE_BALANCE_INCREMENT
+    )
+    return RewardsAndPenaltiesContext(
+        unslashed_participating_increments_array=unslashed_participating_increments_array,
+        active_increments=active_increments,
+    )\<close>
 
 definition new_effective_balances_ctxt :: "(EffectiveBalancesContext, 'a) cont"
-  where "new_effective_balances_ctxt = undefined"
+  where "new_effective_balances_ctxt = do {
+   hysteresis_increment <- word_unsigned_div (EFFECTIVE_BALANCE_INCREMENT config) HYSTERESIS_QUOTIENT;
+   downward_threshold   <- hysteresis_increment .* HYSTERESIS_DOWNWARD_MULTIPLIER;
+   upward_threshold     <- hysteresis_increment .* HYSTERESIS_UPWARD_MULTIPLIER;
+   return (EffectiveBalancesContext.fields downward_threshold upward_threshold)
+}"
+
+text \<open>
+def new_effective_balances_context() -> EffectiveBalancesContext:
+    hysteresis_increment = uint64(EFFECTIVE_BALANCE_INCREMENT // HYSTERESIS_QUOTIENT)
+    return EffectiveBalancesContext(
+        downward_threshold=hysteresis_increment * HYSTERESIS_DOWNWARD_MULTIPLIER,
+        upward_threshold=hysteresis_increment * HYSTERESIS_UPWARD_MULTIPLIER,
+    )
+\<close>
 
 definition new_next_epoch_progressive_balances :: "ProgressiveBalancesCache \<Rightarrow> (ProgressiveBalancesCache, 'a) cont"
-  where "new_next_epoch_progressive_balances progressive_balances = undefined"
+  where "new_next_epoch_progressive_balances progressive_balances = do{
+   let total_active_balance = (0 :: u64);
+   let previous_epoch_flag_attesting_balances = current_epoch_flag_attesting_balances_f progressive_balances;
+   let current_epoch_flag_attesting_balances = ([0,0,0] :: u64 list);
+   return (ProgressiveBalancesCache.fields total_active_balance previous_epoch_flag_attesting_balances
+                                           current_epoch_flag_attesting_balances)
+}"         
+
+text \<open># Set total active balance to 0, it will be updated in
+    # `process_single_effective_balance_update`.
+    total_active_balance = 0
+
+    # Rotate current epoch to previous, and initialize current to 0.
+    previous_epoch_flag_attesting_balances = (
+        progressive_balances.current_epoch_flag_attesting_balances
+    )
+    current_epoch_flag_attesting_balances = [0, 0, 0]
+
+    return ProgressiveBalancesCache(
+        total_active_balance=total_active_balance,
+        previous_epoch_flag_attesting_balances=previous_epoch_flag_attesting_balances,
+        current_epoch_flag_attesting_balances=current_epoch_flag_attesting_balances,
+    )\<close>
 
 definition "activation_epoch :: (Validator, Epoch) lens \<equiv>
              Lens activation_epoch_f (\<lambda>v e. v\<lparr>activation_epoch_f := e\<rparr>) (\<lambda>_. True)"
@@ -1115,7 +1279,11 @@ definition process_epoch_fast :: "(unit, 'a) cont"
     _ <- process_justification_and_finalization_fast;
     _ <- process_epoch_single_pass;
     _ <- process_eth1_data_reset;
-
+    _ <- process_slashings_reset;
+    _ <- process_randao_mixes_reset;
+    _ <- process_historical_summaries_update;
+    _ <- process_participation_flag_updates;
+    _ <- process_sync_committee_updates;
     return ()
 }"
 

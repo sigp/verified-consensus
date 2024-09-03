@@ -78,6 +78,8 @@ definition
 definition 
  "MAX_EFFECTIVE_BALANCE \<equiv> undefined :: u64"
 
+definition 
+ "NUM_FLAG_INDICES \<equiv> undefined :: u64"
 
 definition 
  "EPOCHS_PER_SYNC_COMMITTEE_PERIOD \<equiv> undefined :: u64"

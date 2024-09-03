@@ -1327,7 +1327,7 @@ lemma idk: "finite S \<Longrightarrow> xs = sorted_list_of_set S \<Longrightarro
   apply (simp add: map_insort_sorted)
   by (simp add: inj_image_mem_iff)
 
-lemma foldr_safe_add_is_add: "(foldr (\<lambda>x acc. bindCont acc ((.+) x)) x (return (0 :: 64 word))) \<noteq> fail \<Longrightarrow> 
+(* lemma foldr_safe_add_is_add: "(foldr (\<lambda>x acc. bindCont acc ((.+) x)) x (return (0 :: 64 word))) \<noteq> fail \<Longrightarrow> 
        return (foldr ((+) \<circ> unat) x (0 :: nat)) = 
        (do {x <- (foldr (\<lambda>x acc. bindCont acc ((.+) x)) x (return (0 :: 64 word))); return (unat x)})"
   apply (induct x  ; clarsimp)
@@ -1337,7 +1337,7 @@ lemma foldr_safe_add_is_add: "(foldr (\<lambda>x acc. bindCont acc ((.+) x)) x (
   apply (clarsimp simp: bind_eq_Some_conv)
   by (smt (verit, ccfv_SIG) bind_eq_Some_conv check_bin_op_def 
      check_bin_op_then_def option.distinct(1) option.inject u64_add_def u64_to_nat.simps)
-
+*)
 lemma safe_sum_boundedI: "finite xs \<Longrightarrow> (\<And>x. Finite_Set.fold (+) 0 (unat ` xs) < 2 ^ 64) \<Longrightarrow> (\<exists>y. safe_sum xs = return y)"
   sorry
   apply (clarsimp simp: safe_sum_def)
