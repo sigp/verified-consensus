@@ -635,9 +635,10 @@ We define initializers for these contexts:
 def new_slashings_context(
     state: BeaconState,
     state_ctxt: StateContext,
+    total_active_balance: Gwei,
 ) -> SlashingsContext:
     adjusted_total_slashing_balance = min(
-        sum(state.slashings) * PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX, total_balance
+        sum(state.slashings) * PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX, total_active_balance
     )
     target_withdrawable_epoch = (
         state_ctxt.current_epoch + EPOCHS_PER_SLASHINGS_VECTOR // 2
@@ -729,10 +730,14 @@ def process_epoch_single_pass(
         is_in_inactivity_leak=is_in_inactivity_leak(state),
         churn_limit=get_validator_churn_limit_fast(state),
     )
-    slashings_ctxt = new_slashings_context(state, state_ctxt)
+    slashings_ctxt = new_slashings_context(
+        state, state_ctxt, progressive_balances.total_active_balance
+    )
     rewards_ctxt = new_rewards_and_penalties_context(progressive_balances)
     effective_balances_ctxt = new_effective_balances_ctxt()
-    next_epoch_progressive_balances = new_next_epoch_progressive_balances(progressive_balances)
+    next_epoch_progressive_balances = new_next_epoch_progressive_balances(
+        progressive_balances
+    )
 
     # Determine the final activation queue.
     activation_queue = get_validators_eligible_for_activation(
