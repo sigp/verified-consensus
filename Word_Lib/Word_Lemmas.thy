@@ -1342,7 +1342,7 @@ lemma word_two_power_neg_ineq:
 
 lemma unat_shiftl_absorb:
   "\<lbrakk> x \<le> 2 ^ p; p + k < LENGTH('a) \<rbrakk> \<Longrightarrow> unat (x :: 'a :: len word) * 2 ^ k = unat (x * 2 ^ k)"
-  by (smt add_diff_cancel_right' add_lessD1 le_add2 le_less_trans mult.commute nat_le_power_trans
+  by (smt (verit) add_diff_cancel_right' add_lessD1 le_add2 le_less_trans mult.commute nat_le_power_trans
           unat_lt2p unat_mult_lem unat_power_lower word_le_nat_alt)
 
 lemma word_plus_mono_right_split:
@@ -1511,7 +1511,7 @@ lemma sint_eq_uint_2pl:
 lemma pow_sub_less:
   "\<lbrakk> a + b \<le> LENGTH('a); unat (x :: 'a :: len word) = 2 ^ a \<rbrakk>
    \<Longrightarrow> unat (x * 2 ^ b - 1) < 2 ^ (a + b)"
-  by (smt (z3) eq_or_less_helperD le_add2 le_eq_less_or_eq le_trans power_add unat_mult_lem unat_pow_le_intro unat_power_lower word_eq_unatI)
+  by (smt (verit) eq_or_less_helperD le_add2 le_eq_less_or_eq le_trans power_add unat_mult_lem unat_pow_le_intro unat_power_lower word_eq_unatI)
 
 lemma sle_le_2pl:
   "\<lbrakk> (b :: 'a :: len word) < 2 ^ (LENGTH('a) - 1); a \<le> b \<rbrakk> \<Longrightarrow> a <=s b"
@@ -1544,8 +1544,8 @@ context
 begin
 
 private lemma sbintrunc_uint_ucast:
-  "Suc n = LENGTH('b::len) \<Longrightarrow> signed_take_bit n (uint (ucast w :: 'b word)) = signed_take_bit n (uint w)"
-  by word_eqI
+  \<open>signed_take_bit n (uint (ucast w :: 'b word)) = signed_take_bit n (uint w)\<close> if \<open>Suc n = LENGTH('b::len)\<close>
+  by (rule bit_eqI) (use that in \<open>auto simp add: bit_simps\<close>)
 
 private lemma test_bit_sbintrunc:
   assumes "i < LENGTH('a)"
@@ -1824,7 +1824,7 @@ proof (rule classical)
     apply auto
     apply (cases \<open>size a\<close>)
      apply simp_all
-    apply (smt (z3) One_nat_def diff_Suc_1 signed_word_eqI sint_int_min sint_range_size wsst_TYs(3))
+    apply (smt (verit) One_nat_def diff_Suc_1 signed_word_eqI sint_int_min sint_range_size wsst_TYs(3))
     done
 
   have result_range_simple: "(sint a sdiv sint b \<in> ?range) \<Longrightarrow> ?thesis"

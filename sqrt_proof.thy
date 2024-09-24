@@ -34,6 +34,46 @@ lemma integer_squareroot_aux_wp: "(\<And>n. hoare_triple (P n) (c n) Q) \<Longri
   apply (clarsimp)
   apply (safe; clarsimp?)
   by (blast)
+
+lemma lift_mono': "P \<le> Q \<Longrightarrow> lift P \<le> lift Q"
+  by (clarsimp, erule lift_mono, clarsimp)
+
+lemma integer_squareroot_aux_wp': "(\<And>n. hoare_triple (lift (P n)) (c n) Q) \<Longrightarrow>
+  (\<And>x y n. I x y n \<Longrightarrow> y \<noteq> 0 \<and> y \<le> y + (n div y)) \<Longrightarrow>
+ hoare_triple (lift (\<lambda>s. I x y n \<and> (\<forall>x y . I x y n  \<longrightarrow> x \<le> y \<longrightarrow> P (x, y) s) \<and>
+   (\<forall>x y . I x y n \<longrightarrow> y < x \<longrightarrow>  I y ((y + (n div y)) div 2) n)))  (do { z <- integer_squareroot_aux x y n; c z}) Q"
+  apply (rule_tac P="\<lambda>x y n. hoare_triple (lift (\<lambda>s.  I x y n \<and>   (\<forall>x y . I x y n \<longrightarrow> x \<le> y \<longrightarrow> P (x, y) s) \<and>
+   (\<forall>x y . I x y n \<longrightarrow> y < x \<longrightarrow>  I y ((y + (n div y)) div 2) n)))  (do { z <- integer_squareroot_aux x y n; c z}) Q" in
+ integer_squareroot_aux.induct[simplified]  )
+  apply (atomize)
+  apply (subst integer_squareroot_aux.simps)
+  apply (rule hoare_weaken_pre)
+   apply (wp)
+    apply (clarsimp simp: bindCont_return')
+    apply (blast)
+   apply (wp)
+   apply (erule_tac x="y + (n div y)" in allE, drule mp, clarsimp)
+   apply (assumption)
+  apply (subgoal_tac "(if x \<le> y then \<lless>P (x, y)\<then>
+           else (\<lambda>s. y \<noteq> 0 \<and>
+                      (y \<noteq> 0 \<longrightarrow>
+                       y \<le> y + n div y \<and>
+                       (y \<le> y + n div y \<longrightarrow> \<lless>\<lambda>s. I y ((y + n div y) div 2) n \<and> (\<forall>x y. I x y n \<longrightarrow> x \<le> y \<longrightarrow> P (x, y) s) \<and> (\<forall>x y. I x y n \<longrightarrow> y < x \<longrightarrow> I y ((y + n div y) div 2) n)\<then> s)))) =
+           lift ((if x \<le> y then P (x, y)
+           else (\<lambda>s. y \<noteq> 0 \<and>
+                      (y \<noteq> 0 \<longrightarrow>
+                       y \<le> y + n div y \<and>
+                       (y \<le> y + n div y \<longrightarrow> (\<lambda>s. I y ((y + n div y) div 2) n \<and> (\<forall>x y. I x y n \<longrightarrow> x \<le> y \<longrightarrow> P (x, y) s) \<and> (\<forall>x y. I x y n \<longrightarrow> y < x \<longrightarrow> I y ((y + n div y) div 2) n)) s)))))")
+  apply (simp only:, rule lift_mono')
+  apply (clarsimp)
+   apply (safe; clarsimp?)
+   apply (blast)
+  apply (clarsimp)
+  apply (intro ext, clarsimp)
+  apply (clarsimp simp: lift_def)
+  apply (safe; clarsimp?)
+   apply blast
+  by blast
   
  
 
@@ -141,8 +181,12 @@ lemma mul_injective: "x * 2 = y * 2 \<Longrightarrow> (x * 2) div 2 = x \<Longri
   done
 
 lemma div_2_times_2_div_2[simp]: "((x div 2) * 2) div 2 = ((x div 2) :: u64)"
-  by (metis (no_types, lifting) add.commute add_cancel_right_right dvd_triv_left
-               even_succ_div_2 mult.commute mult_div_mod_eq not_mod_2_eq_0_eq_1)
+  apply (case_tac "even x"; clarsimp?)
+  apply (unat_arith, simp)
+   apply (metis (mono_tags, lifting) Groups.mult_ac(2) add.right_neutral mod_2_eq_odd mult_div_mod_eq of_bool_eq(1))
+  apply (subgoal_tac "\<exists>y. x = (2 * y) + 1", clarsimp)
+   apply (metis Groups.add_ac(2) dvd_triv_right even_half_maybe_succ'_eq mult.commute mult_div_mod_eq)
+  by (meson oddE)
 
 lemma "a * x = a * y \<Longrightarrow> a \<noteq> 0 \<Longrightarrow> x = (y :: int)"
   apply (clarsimp)
@@ -327,11 +371,9 @@ lemma le_div_times_iff: "unat z * unat y < 2^64 \<Longrightarrow> y \<noteq> 0 \
 
 
 lemma le_div_timesI: "x \<le> z * (y :: u64) \<Longrightarrow>  x div y \<le> z "
-  by (metis bits_div_by_0 div_lt_mult linorder_not_less word_gt_a_gt_0 word_neq_0_conv)
+  by (metis div_by_0 div_lt_mult linorder_not_less word_gt_a_gt_0 word_neq_0_conv)
 
 
-
-  
 
 lemma square_less_than': " 2 * x + x * x \<le> 2 * x + x * x + 1 \<Longrightarrow>  2 * x \<le> 2 * x + x * x \<Longrightarrow> n \<noteq> 0 \<Longrightarrow> x \<le> x + n div x \<Longrightarrow> x \<noteq> 0 \<Longrightarrow>  (x + n div x) div 2 = x \<Longrightarrow>
   (x + 1) * (x + 1) > (n :: u64)" 
@@ -400,7 +442,6 @@ lemma yet_another_helper: "n div y \<le> y + 1 \<Longrightarrow> (y + n div y) d
   apply linarith
   by (linarith)
 
-  
 
 
 
@@ -416,14 +457,37 @@ lemma x_add_cases: "x div Suc (Suc 0) +
    apply (metis dvd_div_mult_self mult_2_right numeral_2_eq_2)
   by (metis One_nat_def mult_2 numeral_2_eq_2 odd_two_times_div_two_nat)
 
+lemma minus_times: "((x :: nat) * y) - y = (x - 1) * (y)" 
+  apply (case_tac x)
+   apply (clarsimp)
+  apply (clarsimp)
+  done
 
+  
 
 lemma midpoint_le: "x \<le> n \<Longrightarrow> (x :: nat) + n div x \<le> n + 1" 
-  apply (induct x rule: less_induct)
-  apply (case_tac x; clarsimp)
-  apply (drule_tac x=nat in meta_spec)
-  apply (clarsimp)
-  sorry
+  apply (case_tac "x = 0"; clarsimp?)
+  apply (case_tac "x = n"; clarsimp?)
+  apply (subgoal_tac "\<exists>y r. r < x \<and> x * y + r = n \<and> (x * y + r) div x = y \<and> y \<le> n")
+   apply (clarsimp)
+   apply (case_tac "y = 0"; clarsimp?)
+  defer
+   apply (rule_tac x="n div x" in exI)
+   apply (rule_tac x="n mod x" in exI)
+   apply (clarsimp)
+  apply (case_tac "y = 1"; clarsimp?)
+  apply (subst le_diff_conv2[symmetric])
+  using le_Suc_eq apply blast
+  apply (subgoal_tac "Suc (x * y + r) - y = (x - 1) * y + (r + 1)")
+   apply (simp only:) 
+   apply (clarsimp)
+  apply (metis Nat.add_0_right Nat.lessE Suc_le_D add_Suc_right 
+     diff_add_inverse2 mult_Suc_right not_less_eq_eq trans_le_add1)
+  apply (clarsimp simp: minus_times)
+  by (smt (verit, ccfv_SIG) Nat.diff_diff_right add.commute
+        diff_Suc_Suc diff_diff_cancel diff_diff_left diff_is_0_eq'
+        gr_implies_not0 le_Suc_eq minus_nat.diff_0 mult_Suc mult_le_cancel2 nat_le_linear)
+
 
 
 lemma move_it: "Suc y = x \<Longrightarrow> y \<le> a \<Longrightarrow> x \<le> Suc a"
@@ -547,18 +611,7 @@ lemma  (in hoare_logic) word_sqrt_ge:
 
 
 
-  
-
-lemma "unat (n :: 2 word) < unat (x + 1) * unat (x + 1) \<Longrightarrow> n < n + 1 \<Longrightarrow> x \<le> n \<Longrightarrow>
-       unat n < unat ((x + n div x) div 2 + 1) * unat ((x + n div x) div 2 + 1)" 
-  apply (erule diff_lessE)
-  apply (subgoal_tac "x + 1 \<noteq> 0")
-   apply (subst unatSuc2, clarsimp)+
-  apply (metis add_cancel_right_right bits_div_0 div_less_dividend_word less_is_non_zero_p1 one_add_one zero_neq_one)
-    apply (subst unatSuc2, clarsimp)+
-  apply (metis add_cancel_right_right bits_div_0 div_less_dividend_word less_is_non_zero_p1 one_add_one zero_neq_one)
-   apply (clarsimp)
-  oops
+ 
 
 lemma (in hoare_logic) sqrt_le  : "sqrt' n \<le> n"
   apply (induct rule: sqrt_induct)
@@ -573,7 +626,6 @@ lemma (in hoare_logic) sqrt_le_eqI: "sqrt' n \<le> x \<Longrightarrow> x * x \<l
 lemma div_2_helper: "na < na + 2 \<Longrightarrow> (2 + na :: u64) div 2 = 1 + (na div 2)"
  
   by (simp add: add.commute div_helper)
-
 
 
 
@@ -625,14 +677,12 @@ qed
 lemma theE: "P (THE x. Q x) \<Longrightarrow> \<exists>!y. Q y  \<Longrightarrow> (\<And>x. Q x \<Longrightarrow> P x \<Longrightarrow> R) \<Longrightarrow>  R"
   by (metis theI)
 
-find_theorems "unat ?n \<le> _"
 
 
 lemma unat_max: "unat (n :: 64 word) \<le>  (2 ^  64) - 1"
   apply (rule word_unat_less_le)
   apply (unat_arith, clarsimp)
   done
-sledgehammer
 
 lemma le_suc_le: "x \<le> y \<Longrightarrow> Suc x \<le> Suc y"
   by force
@@ -687,9 +737,6 @@ lemma (in hoare_logic)" (\<And>n. hoare_triple (P n) (c n) Q) \<Longrightarrow>
     apply (clarsimp simp: integer_squareroot_def)
   apply (wp)
     apply (clarsimp)
-    apply (clarsimp simp: bind_assoc bindCont_return')
-    apply (wp)
-   apply (clarsimp)
   apply (rule hoare_weaken_pre)
    apply (subst integer_squareroot_def )
    apply (simp only: bindCont_assoc[symmetric] bindCont_return' Let_unfold)+
@@ -744,7 +791,102 @@ div_helper div_mod_step mult_2 not_less_iff_gr_or_eq order_le_less sub_wrap_lt t
     apply (meson add_cancel_right_right antisym_conv1 leD word_less_div)
   using less_is_non_zero_p1 word_overflow apply blast
   by (meson another_helper word_le_plus_either word_sqrt_ge)
-       
+
+
+lemma lift_pure_simp[simp]: "lift (\<lambda>s. P \<and> Q s) = (\<lambda>s. P \<and> lift Q s)"
+  sorry
+
+lemma lift_pure_simp': "lift (\<lambda>s. P s \<and> Q) = (\<lambda>s. lift P s \<and> Q )"
+  sorry
+
+
+thm impI
+
+lemma lift_pure_impI: "(P \<Longrightarrow> lift (\<lambda>s. Q s \<and> R s) s) \<Longrightarrow>
+                             (\<not>P \<Longrightarrow> lift R s) \<Longrightarrow>  lift (\<lambda>s. (P \<longrightarrow> Q s) \<and> R s) s"
+  apply (clarsimp simp: lift_def)
+  apply (case_tac P; clarsimp?)
+  done
+
+lemma lift_pure_simp''[simp]: "lift (\<lambda>s. P \<longrightarrow> Q s) = (\<lambda>s. P \<longrightarrow> lift Q s)"
+  apply (clarsimp simp: lift_def, rule ext, safe)
+    apply (clarsimp simp: lift_def)
+  apply (clarsimp simp: lift_def)
+   apply (metis id_apply point_of_id)
+  apply (clarsimp simp: lift_def)
+  apply (blast)
+  done
+
+
+
+lemma (in hoare_logic) sqrt_wp[wp]: " (\<And>n. hoare_triple (lift (P n)) (c n) Q) \<Longrightarrow> 
+   hoare_triple (lift (\<lambda>s. n < n + 1 \<and> (n < n + 1 \<longrightarrow> P (sqrt' n) s)))
+  (bindCont (integer_squareroot n) c) Q"
+  apply (case_tac "n = 0", clarsimp)
+  apply (rule hoare_weaken_pre)
+    apply (clarsimp simp: integer_squareroot_def)
+  apply (wp)
+    apply (clarsimp)
+  apply (rule hoare_weaken_pre)
+   apply (subst integer_squareroot_def )
+   apply (simp only: bindCont_assoc[symmetric] bindCont_return' Let_unfold)+
+   apply (rule wp)+
+   apply (simp only: bindCont_assoc[symmetric] bindCont_return')?
+  apply (rule 
+           integer_squareroot_aux_wp'[where I="(\<lambda>x y n. y \<noteq> 0 \<and> y \<le> y + (n div y) \<and> x \<le> n 
+                                            \<and> x + 1 \<ge> y \<and> x \<ge> sqrt' n \<and>
+                                               y = (x + (n div x)) div 2 )"])
+    apply (clarsimp)
+  apply (simp only: bindCont_assoc[symmetric] bindCont_return')?
+    apply (atomize)
+    apply (erule_tac x="fst (a, b)" in allE)
+    apply (subst (asm) fst_conv, assumption) 
+    apply (blast)
+  apply (clarsimp)
+  apply (intro context_conjI impI allI; clarsimp?)+
+          apply (fastforce)
+  apply (metis (no_types, opaque_lifting) inc_i lt1_neq0 not_less_iff_gr_or_eq one_add_one word_le_less_eq word_less_div)
+                apply (smt (verit) add_diff_cancel_right' add_diff_eq diff_numeral_special(9) 
+div_helper div_mod_step mult_2 not_less_iff_gr_or_eq order_le_less sub_wrap_lt times_2_cases word_div_lt_eq_0 word_leq_minus_one_le)
+          apply (simp add: div_less_dividend_word less_is_non_zero_p1 word_le_less_eq)
+  apply (rule sqrt_le)
+
+        apply (simp add: div_word_self)
+  apply (clarsimp simp: lift_pure_simp')
+  apply (intro conjI)
+   apply (erule lift_mono)
+  apply (clarsimp)
+       apply (subgoal_tac "xa = (sqrt' n)", clarsimp)
+       apply (rule sqrt_le_eqI, assumption)
+        apply (subgoal_tac " xa = (xa + n div xa) div 2 \<or> xa = (xa + n div xa) div 2 - 1")
+         apply (elim disjE)
+  using local.square_less_than apply fastforce
+  apply (metis leI le_div_timesI order_less_imp_le word_le_plus_either word_must_wrap yet_another_helper)
+     (*   apply (metis (no_types, lifting) diff_eq_eq le_step_down_word word_must_wrap) *)
+  
+  apply (metis (no_types, lifting) antisym_conv1 eq_diff_eq word_le_minus_one_leq word_must_wrap)
+
+  
+         apply (smt (z3) add.commute antisym_conv2 diff_add_cancel 
+                         div_less_dividend_word div_lt' div_to_mult_word_lt dual_order.strict_iff_not 
+                         eq_2_64_0 less_x_plus_1 mult_2 mult_2_right 
+                         one_add_one times_2_cases u64_max word_coorder.extremum_unique
+                         word_le_not_less word_plus_mcs_4 word_random x_square_defined_iff)
+  apply (clarsimp)
+  apply (intro conjI impI)
+    apply (metis (no_types, lifting) add_cancel_right_right le_step_down_word lt1_neq0 
+           mult_zero_right times_2_cases word_coorder.extremum_uniqueI word_less_1 word_less_div)
+  
+  apply (smt (verit, ccfv_SIG) add_cancel_left_right another_helper dual_order.order_iff_strict linorder_le_less_linear word_div_less word_le_plus_either)
+    apply force
+  defer
+   apply (meson another_helper word_le_plus_either word_sqrt_ge)
+  apply (rule ge_sqrt_helper)
+  using less_is_non_zero_p1 word_overflow apply blast
+     apply force
+  using not_less_iff_gr_or_eq word_less_div apply fastforce
+  using less_is_non_zero_p1 word_overflow apply blast
+  by (meson another_helper word_le_plus_either word_sqrt_ge)
 
 end
 

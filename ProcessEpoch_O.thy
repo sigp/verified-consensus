@@ -92,12 +92,6 @@ term "(\<lambda>s. grab {(l, s').  ((maps_to l v -* eq (singleton_p (K s)))) s'}
 
 definition "alloc v f = (\<Sqinter>R. \<Squnion>l. assert (Collect (lift (maps_to l v \<longrightarrow>* R l))); spec (UNIV \<times> Collect (lift (R l))); f l)" 
 
-definition "alloc v = do {
-  s <- getState;
-  (l, s') <- grab {(l, s').  ((maps_to l v -* eq (singleton_p (K s)))) s'}; 
-  _ <- setState (set l s (Some v));
-  return l
-}"
 end
 
 
@@ -127,8 +121,12 @@ lemma "hoare_triple (ALLS l. lift (maps_to l v \<longrightarrow>* R)) (alloc v) 
   apply (subst Sup_le_iff, clarsimp)
   by (metis (no_types, lifting) Collect_mono assert_iso seq_mono_left)
 
+lemma all_liftD: "lift (ALLS x. P x) s \<Longrightarrow> (ALLS x. lift (P x)) s"
+  apply ( clarsimp simp: lift_def)
+  apply (blast)
+  done
 
-lemma alloc_wp[wp]:"(\<And>l. hoare_triple (lift (P l)) (c l) Q) \<Longrightarrow>  hoare_triple (ALLS l. lift (maps_to l v \<longrightarrow>* (P l))) (bindCont (alloc v) c) (Q)"
+lemma alloc_wp[wp]:"(\<And>l. hoare_triple (lift (P l)) (c l) Q) \<Longrightarrow>  hoare_triple (lift (ALLS l.  (maps_to l v \<longrightarrow>* (P l)))) (bindCont (alloc v) c) (Q)"
   apply (clarsimp simp: alloc_def hoare_triple_def run_def bindCont_def)
   apply (rule Inf_lower2)
   apply (clarsimp simp: image_iff)
@@ -141,7 +139,12 @@ lemma alloc_wp[wp]:"(\<And>l. hoare_triple (lift (P l)) (c l) Q) \<Longrightarro
   apply (rule order_trans)
    apply (rule hoare_chain')
    apply (rule order_refl)
-  by (metis (no_types, lifting) Collect_mono assert_iso seq_mono_left)
+  apply (rule seq_mono_left)
+  apply (subst assert_iso[symmetric])
+  apply (clarsimp)
+  apply (drule all_liftD)
+  apply (blast)
+  done
 
  
   
@@ -152,6 +155,7 @@ context extended_vc
 
 begin
 
+definition "saturating_sub x y \<equiv> if x \<ge> y then x - y else 0"
 
 text \<open>definition "maps_to x y \<equiv> \<lambda>s. snd s = [x \<mapsto> y]"
 
@@ -395,7 +399,7 @@ definition process_single_slashing :: "u64 \<Rightarrow> Validator \<Rightarrow>
                            penalty_numerator <- penalty_numerator .* adjusted_total_slashing_balance_f s_ctxt;
                            penalty <- word_unsigned_div penalty_numerator (total_active_balance_f pbc);
                            penalty <- penalty .* increment;
-                           return (balance - penalty)
+                           return (saturating_sub balance penalty)
                       }
                       else do {return balance}
 }"
@@ -598,7 +602,7 @@ definition get_flag_attesting_balance :: "nat \<Rightarrow> Epoch \<Rightarrow> 
   where "get_flag_attesting_balance flag_index epoch = do {
    unslashed_participating_indices <- get_unslashed_participating_indices flag_index epoch;
    total_balance <- get_total_balance unslashed_participating_indices;
-   return undefined
+   return total_balance
 }"
 
 text \<open>
@@ -641,7 +645,7 @@ definition new_base_rewards_cache :: "(BaseRewardsCache, 'a) cont"
  validators <- read validators;
  let effective_balances = map Validator.effective_balance_f (var_list_inner validators);
  base_rewards <- compute_base_rewards;
- return (BaseRewardsCache.fields effective_balances base_rewards :: BaseRewardsCache)
+ return (\<lparr>effective_balances_f = effective_balances, base_rewards_f = base_rewards\<rparr>)
 }"
 
 text \<open>
@@ -652,6 +656,7 @@ def new_base_reward_cache(
     base_rewards = compute_base_rewards(state)
     return BaseRewardCache(effective_balances=effective_balances, base_rewards=base_rewards)
 \<close>
+
 
 definition get_validator_churn_limit_fast :: "(u64, 'a) cont" 
   where "get_validator_churn_limit_fast = do {
@@ -676,14 +681,13 @@ definition new_state_context :: "(StateContext, 'a) cont"
 
 
 
-(*FIXME where does total_balance come from? *)
-definition new_slashings_context :: "StateContext \<Rightarrow> (SlashingsContext, 'a) cont"
-  where "new_slashings_context state_ctxt = do {
+definition new_slashings_context :: "StateContext \<Rightarrow> ProgressiveBalancesCache \<Rightarrow> (SlashingsContext, 'a) cont"
+  where "new_slashings_context state_ctxt pbc = do {
 
    xs <- read slashings;
    total_slashings  <- safe_sum (vector_inner xs);
    adjusted_total_slashing_balance <- total_slashings .* PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX;
-   total_balance <- get_total_active_balance;
+   let total_balance = total_active_balance_f pbc;
    let adjusted_total_slashing_balance = min adjusted_total_slashing_balance total_balance;
    target_withdrawable_epoch <- raw_epoch (current_epoch_f state_ctxt) .+ (EPOCHS_PER_SLASHINGS_VECTOR config);
    target_withdrawable_epoch <- word_unsigned_div target_withdrawable_epoch 2;
@@ -792,7 +796,8 @@ definition "activation_epoch :: (Validator, Epoch) lens \<equiv>
              Lens activation_epoch_f (\<lambda>v e. v\<lparr>activation_epoch_f := e\<rparr>) (\<lambda>_. True)"
 
 definition "v_list_lens i \<equiv> 
-            (Lens (\<lambda>l. var_list_inner l ! u64_to_nat i) (\<lambda>l e. VariableList (list_update (var_list_inner l) (u64_to_nat i) e)) (\<lambda>_. True))"
+            (Lens (\<lambda>l. var_list_inner l ! u64_to_nat i) 
+            (\<lambda>l e. VariableList (list_update (var_list_inner l) (u64_to_nat i) e)) (\<lambda>_. True))"
 
 definition "var_list_index_lens ls i \<equiv> do {
   l <- read ls;
@@ -869,15 +874,25 @@ def is_unslashed_participating_index(
         and has_flag(validator_info.previous_epoch_participation, flag_index)
     )
 \<close>
-definition "get_flag_index_delta v_info flag_index rewards_ctxt state_ctxt = do{
+definition get_flag_index_delta ::
+      "ValidatorInfo \<Rightarrow> nat \<Rightarrow> RewardsAndPenaltiesContext \<Rightarrow> 
+        StateContext \<Rightarrow> ((u64 \<times> u64), 'a) cont" 
+  where "get_flag_index_delta v_info flag_index rewards_ctxt state_ctxt = do{
       let base_reward = base_reward_f v_info;
       let weight = PARTICIPATION_FLAG_WEIGHTS ! flag_index;
-      let unslashed_participating_increments = unslashed_participating_increments_array_f rewards_ctxt ! flag_index;
+      let unslashed_participating_increments = 
+            unslashed_participating_increments_array_f rewards_ctxt ! flag_index;
       if (is_unslashed_participating_index v_info flag_index) \<and>
                           \<not>(is_in_inactivity_leak_f state_ctxt) then do {
-          return (0,0)}
+          x <- base_reward .*  weight;
+          reward_numerator   <- x .* unslashed_participating_increments;
+          reward_denominator <- active_increments_f rewards_ctxt .* WEIGHT_DENOMINATOR;
+          reward             <- word_unsigned_div reward_numerator reward_denominator;
+          return (reward,0)}
       else if (flag_index \<noteq> TIMELY_HEAD_FLAG_INDEX) then do {
-          return (0,0)
+          penalty_numerator <- base_reward .* weight;
+          penalty <- word_unsigned_div penalty_numerator WEIGHT_DENOMINATOR;
+          return (0,penalty)
       } else       
       return (0,0)
 }"
@@ -943,8 +958,9 @@ definition ref_unsigned_add_r :: "(u64, 'b) ref \<Rightarrow> u64 \<Rightarrow> 
 adhoc_overloading
   unsigned_add ref_unsigned_add ref_unsigned_add_l ref_unsigned_add_r
 
-definition "saturating_sub x y \<equiv> if x \<ge> y then x - y else 0"
 
+definition "free l f = (\<Sqinter>R. \<lbrace>Collect \<lless>(EXS v. l \<mapsto>\<^sub>l v) \<and>* R \<then>\<rbrace> ; \<lparr>UNIV \<times> Collect \<lless>R \<then>\<rparr> ; f ())"
+find_theorems alloc
 definition process_single_reward_and_penalty :: 
   "u64 \<Rightarrow> u64 \<Rightarrow> ValidatorInfo \<Rightarrow> RewardsAndPenaltiesContext \<Rightarrow> StateContext \<Rightarrow> (u64, 'a) cont"
   where "process_single_reward_and_penalty balance inactivity_score 
@@ -966,8 +982,14 @@ definition process_single_reward_and_penalty ::
            (if (r \<noteq> 0 \<or> p \<noteq> 0) then do {
                new_balance <- balance .+ r;
                let new_balance = (if new_balance \<ge> p then new_balance - p else 0);
+               _ <- free rewards;
+               _ <- free penalties;
                return new_balance
-           } else return balance)
+           } else do {
+             _ <- free rewards;
+             _ <- free penalties;
+             return balance
+           })
         } else (return balance)
 }"
   
@@ -1048,14 +1070,30 @@ text \<open>def process_single_inactivity_update(
 
     return new_inactivity_score\<close>
 
+text \<open>  \<close>
+
+term current_epoch_participation
+
 definition
-  process_single_effective_balance_update :: "u64 \<Rightarrow> (Validator, 'b) ref \<Rightarrow> ValidatorInfo \<Rightarrow> 
-                                             ProgressiveBalancesCache \<Rightarrow> BaseRewardsCache \<Rightarrow>
-                                             EffectiveBalancesContext \<Rightarrow> StateContext \<Rightarrow> (unit, 'a) cont"
+  process_single_effective_balance_update :: "(u64, 'b) ref \<Rightarrow> (Validator, 'b) ref \<Rightarrow> ValidatorInfo \<Rightarrow> 
+                                             (ProgressiveBalancesCache, 'b) ref \<Rightarrow> (BaseRewardsCache, 'b) ref  \<Rightarrow>
+                                             EffectiveBalancesContext \<Rightarrow> StateContext \<Rightarrow>ParticipationFlags \<Rightarrow> (unit, 'a) cont"
   where "process_single_effective_balance_update balance validator 
-                   val_info next_epb next_ebrc eb_ctxt state_ctxt = do {
-   
-  return ()
+                   val_info next_epb next_ebrc eb_ctxt state_ctxt cep = do {
+  balance <- read_beacon balance;
+  ebf     <- Validator.effective_balance_f <$> read_beacon validator;  
+  d_threshold <- balance .+ (downward_threshold_f eb_ctxt);
+  u_threshold <- ebf .+ (upward_threshold_f eb_ctxt);
+  _ <- when (d_threshold < ebf \<or>
+             u_threshold < balance) (do {
+         x <- word_unsigned_mod balance (EFFECTIVE_BALANCE_INCREMENT config);
+         new_balance <- balance .- x;
+         (validator := return (validator\<lparr> Validator.effective_balance_f := min new_balance MAX_EFFECTIVE_BALANCE\<rparr>))
+        });
+  val <- read_beacon validator; 
+  _ <- update_next_epoch_progressive_balances (next_epoch_f state_ctxt) next_epb val cep (effective_balance_f val_info);
+  ebf     <- Validator.effective_balance_f <$> read_beacon validator;  
+  (next_ebrc := return (next_ebrc\<lparr>effective_balances_f := effective_balances_f next_ebrc @ [ebf]\<rparr>))
 }"
 
 text \<open>def process_single_effective_balance_update(
@@ -1094,15 +1132,16 @@ definition process_epoch_single_pass :: "(unit, 'a) cont"
   where "process_epoch_single_pass = do {
   progressive_balances <- read progressive_balances_cache;
   state_ctxt <- new_state_context;
-  slashings_ctxt <- new_slashings_context state_ctxt;
+  slashings_ctxt <- new_slashings_context state_ctxt progressive_balances ;
   rewards_ctxt <- new_rewards_and_penalties_context progressive_balances;
   effective_balances_ctxt <- new_effective_balances_ctxt;
   next_epoch_progressive_balances <- new_next_epoch_progressive_balances progressive_balances;
+  nepb <- alloc next_epoch_progressive_balances;
   aq <- read activation_queue; 
   finalised_checkpoint <- epoch_f <$> read finalized_checkpoint;
   let final_activation_queue = get_validators_eligible_for_activation aq finalised_checkpoint (churn_limit_f state_ctxt);
   next_epoch_activation_queue <- alloc (ActivationQueue.fields []);
-  let next_epoch_base_reward_cache = BaseRewardsCache.fields [] [];
+  next_epoch_base_reward_cache <- alloc (BaseRewardsCache.fields [] []);
   next_epoch_num_active_validators <- alloc (0 :: u64);
   current_epoch <- get_current_epoch;
   previous_epoch <- get_previous_epoch;
@@ -1135,8 +1174,8 @@ definition process_epoch_single_pass :: "(unit, 'a) cont"
      _  <- process_single_registry_update validator validator_info ec final_activation_queue next_epoch_activation_queue state_ctxt;
      v  <- read validator;
      _  <- (balance := process_single_slashing balance v slashings_ctxt progressive_balances);
-     b  <- read balance; 
-     _  <- process_single_effective_balance_update b validator validator_info next_epoch_progressive_balances next_epoch_base_reward_cache effective_balances_ctxt state_ctxt;
+     _  <- process_single_effective_balance_update balance validator validator_info nepb next_epoch_base_reward_cache effective_balances_ctxt state_ctxt c_p;
+
      v  <- read validator;
      _  <- when (is_active_next_epoch v (next_epoch_f state_ctxt)) (next_epoch_num_active_validators := next_epoch_num_active_validators .+ 1);
      return ()
@@ -1144,7 +1183,8 @@ definition process_epoch_single_pass :: "(unit, 'a) cont"
   _ <- (progressive_balances_cache := return next_epoch_progressive_balances);
   _ <- (activation_queue := read next_epoch_activation_queue);
   new_base_reward <- compute_base_rewards;
-  _ <- (base_rewards_cache := return (next_epoch_base_reward_cache\<lparr>base_rewards_f := new_base_reward\<rparr>) );
+  _ <- (next_epoch_base_reward_cache := return (next_epoch_base_reward_cache\<lparr>base_rewards_f := new_base_reward\<rparr>));
+  _ <- (base_rewards_cache := read (next_epoch_base_reward_cache) );
   _ <- (num_active_validators := read next_epoch_num_active_validators);
   return ()
  }"

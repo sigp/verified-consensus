@@ -142,7 +142,7 @@ lemma add_sanity: "x < 2^64 - 2 \<Longrightarrow> run (x .+ 1) \<noteq> \<top>"
   by (metis inc_i less_x_plus_1 olen_add_eqv order_less_imp_le word_order.extremum)
 
 definition word_unsigned_mul :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
-  "word_unsigned_mul x y \<equiv>
+  "word_unsigned_mul x y \<equiv> if (x = 0 \<or> y = 0) then return 0 else
      let result = x * y in
      if result div x = y then return result else fail"
 

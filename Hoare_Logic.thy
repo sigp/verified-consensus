@@ -1150,8 +1150,9 @@ lemma hoare_eqI': "hoare_triple (lift (P x)) (f x) Q \<Longrightarrow> hoare_tri
   apply (blast)
   done
 
+find_consts "('e \<Rightarrow> 'f) \<Rightarrow> 'f set"
 
-definition "in_set P c \<equiv> \<forall>s. (point_of c) s = s \<longrightarrow> P s"
+definition "in_set P c \<equiv> \<forall>s\<in>Set.range (point_of c). P s"
 
 lemma [simp]: "in_set (\<lambda>c. True) s" by (clarsimp simp: in_set_def)
 
@@ -1168,6 +1169,7 @@ lemma assert_wp'[wp]:
    apply (clarsimp simp: lift_def)
    apply (blast)
   apply (clarsimp simp: lift_def in_set_def)
+  apply (erule_tac x=a in allE, erule_tac x=b in allE, clarsimp)
   done
 
 
@@ -1197,7 +1199,6 @@ lemma select_wp_lift[wp]: "(\<And>x. x \<in> P \<Longrightarrow> hoare_triple (l
   apply (subst assert_iso[symmetric], clarsimp)
   apply (clarsimp simp: lift_def)
   by auto
->>>>>>> cf2fef3 (Added new separation algebra, data refinement framework, specs for optimised processing)
 
 end
 
