@@ -1,6 +1,12 @@
 (* Definition of the `verified_con` locale which is used in the rest of the project *)
 theory VerifiedConsensus
-  imports "algebra/rg-algebra/AbstractAtomicTest/Programming_Constructs" Cont_Monad_Algebra Types Config "Word_Lib.Word_64" "Word_Lib.More_Arithmetic"  Invariants Lens
+  imports "algebra/rg-algebra/AbstractAtomicTest/Idle" 
+           Cont_Monad_Algebra 
+           Types Config 
+          "Word_Lib.Word_64" 
+          "Word_Lib.More_Arithmetic"  
+           Invariants 
+           Lens
 begin
 
 datatype ('a, 'b) Lex_Prod = Prod (major :'a) (minor : 'b) 

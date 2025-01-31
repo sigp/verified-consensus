@@ -605,6 +605,7 @@ lemma  (in hoare_logic) word_sqrt_ge:
    apply (rule ge_sqrt)
     apply (metis div_le_mono th2)
    apply (assumption)
+  apply (intro conjI impI)
   apply (clarsimp)
   by (meson Nat.le_diff_conv2 div_le_dividend leD le_trans linorder_le_less_linear nat_add_left_cancel_le)
 
@@ -723,6 +724,7 @@ lemma  (in hoare_logic) ge_sqrt_helper: assumes well_defined: "x < x + 1"  shows
   using word_le_nat_alt apply blast
   using well_defined apply blast
    apply linarith
+  apply (intro conjI)
   apply (clarsimp)
   by (smt (verit, best) Nat.diff_diff_right diff_le_self div_le_dividend leD le_trans less_imp_le_nat)
   
@@ -732,7 +734,6 @@ lemma (in hoare_logic)" (\<And>n. hoare_triple (P n) (c n) Q) \<Longrightarrow>
    hoare_triple (\<lambda>s. n < n + 1 \<and> (n < n + 1 \<longrightarrow> P (sqrt' n) s))
   (bindCont (integer_squareroot n) c) Q"
   apply (case_tac "n = 0", clarsimp)
-  find_theorems name:induct "_ :: u64"
   apply (rule hoare_weaken_pre)
     apply (clarsimp simp: integer_squareroot_def)
   apply (wp)

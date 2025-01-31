@@ -1,5 +1,5 @@
 theory Hoare_Logic
-  imports ProcessEpoch "algebra/rg-algebra/AbstractAtomicTest/Programming_Constructs" 
+  imports ProcessEpoch 
   Fun_Algebra
   Word_Lib.More_Divides Word_Lib.Word_EqI
 Word_Lib.Word_64 Word_Lib.Bitwise Word_Lib.Word_Lemmas
@@ -1126,6 +1126,7 @@ shows " hoare_triple P (f (map g xs)) Q \<Longrightarrow>   hoare_triple (\<lamb
     apply (clarsimp)
   apply (clarsimp)
   done
+
 
 lemma hoare_assert_stateI:"(\<And>s. P s \<Longrightarrow> hoare_triple (\<lambda>s'. s = s') f Q) \<Longrightarrow> hoare_triple P f Q"
   apply (clarsimp simp: hoare_triple_def assert_galois_test)

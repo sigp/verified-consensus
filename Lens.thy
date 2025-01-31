@@ -29,6 +29,9 @@ definition lens_ocomp :: "('b, 'a) lens \<Rightarrow> ('c, 'b option) lens \<Rig
 "lens_ocomp l l' \<equiv> Lens (\<lambda>s. map_option (get l) (get l' s) ) (\<lambda>s a. set l' s (Option.bind (get l' s) (\<lambda>s'. Option.bind a (\<lambda>a. Some (set l s' a)))) ) (\<lambda>_. True) "
 
 
+definition lens_oocomp :: "('b, 'a option) lens \<Rightarrow> ('c, 'b option) lens \<Rightarrow> ('c, 'a option) lens" (infixl "|oo>" 54) where 
+"lens_oocomp l l' \<equiv> Lens (\<lambda>s. Option.bind (get l' s) (get l)  ) (\<lambda>s a. set l' s (Option.bind (get l' s) (\<lambda>s'. Some (set l s' a) )) ) (\<lambda>_. True) "
+
 adhoc_overloading
-  lcomp lens_comp lens_ocomp
+  lcomp lens_comp lens_ocomp lens_oocomp
 end

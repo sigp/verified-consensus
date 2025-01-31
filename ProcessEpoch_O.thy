@@ -1,5 +1,5 @@
 theory ProcessEpoch_O
-imports Hoare_Logic "algebra/rg-algebra/General/Iteration_Liberation" ProcessEpoch
+imports Hoare_Logic ProcessEpoch
 begin
 
 record ProgressiveBalancesCache = 
@@ -243,7 +243,7 @@ text \<open>def get_max_exit_epoch(exit_cache: ExitCache) -> Epoch:
         return max(exit_cache.exit_epoch_counts.keys())\<close>
 
 definition get_max_exit_epoch :: "ExitCache \<Rightarrow> Epoch"
-  where "get_max_exit_epoch cache = Max (dom (exit_epoch_counts_f cache)) " 
+  where "get_max_exit_epoch cache = (let counts = dom (exit_epoch_counts_f cache) in if finite counts \<and> counts \<noteq> {} then Max counts else Epoch 0) " 
 
 text \<open>def get_exit_queue_churn(exit_cache: ExitCache, exit_queue_epoch: Epoch) -> uint64:
     return exit_cache.exit_epoch_counts.get(exit_queue_epoch) or 0\<close>
@@ -270,9 +270,10 @@ definition initiate_validator_exit_fast :: "(Validator, 'b) ref \<Rightarrow> (E
         let exit_queue_epoch = max max_exit_epoch_from_cache activation_exit_epoch;
         let exit_queue_churn = get_exit_queue_churn exit_cache exit_queue_epoch;
         exit_queue_epoch <- (if exit_queue_churn \<ge> churn_limit_f state_ctxt then exit_queue_epoch .+ Epoch 1 else return exit_queue_epoch);
-        _ <- (exit_epoch :=  return exit_queue_epoch);
-        _ <- (withdrawable_epoch := ee .+ Epoch (MIN_VALIDATOR_WITHDRAWABILITY_DELAY config) );
-        _ <- record_validator_exit ec exit_queue_epoch;
+        _  <- (exit_epoch :=  return exit_queue_epoch);
+        ee <- read exit_epoch;
+        _  <- (withdrawable_epoch := ee .+ Epoch (MIN_VALIDATOR_WITHDRAWABILITY_DELAY config) );
+        _  <- record_validator_exit ec exit_queue_epoch;
         return () });
    return ()}"
 
@@ -795,14 +796,15 @@ text \<open># Set total active balance to 0, it will be updated in
 definition "activation_epoch :: (Validator, Epoch) lens \<equiv>
              Lens activation_epoch_f (\<lambda>v e. v\<lparr>activation_epoch_f := e\<rparr>) (\<lambda>_. True)"
 
+
+
 definition "v_list_lens i \<equiv> 
-            (Lens (\<lambda>l. var_list_inner l ! u64_to_nat i) 
-            (\<lambda>l e. VariableList (list_update (var_list_inner l) (u64_to_nat i) e)) (\<lambda>_. True))"
+            (Lens (\<lambda>l. if u64_to_nat i < length (var_list_inner l) \<and> length (var_list_inner l) < 2 ^ 64  then Some (var_list_inner l ! u64_to_nat i) else None) 
+            (\<lambda>l e. case e of (Some e) \<Rightarrow> VariableList (list_update (var_list_inner l) (u64_to_nat i) e) | _ \<Rightarrow> l) (\<lambda>_. True))"
 
 definition "var_list_index_lens ls i \<equiv> do {
-  l <- read ls;
-  (if (i < var_list_len l) then return (v_list_lens i |o> ls)
-  else fail) }"
+  l <- read (v_list_lens i |oo> ls);
+  return (v_list_lens i |oo> ls) }"
 
 notation "var_list_index_lens" (infixr "!?"  88)
 
@@ -1126,7 +1128,7 @@ text \<open>def process_single_effective_balance_update(
     # Add the validator's effective balance to the base reward cache.
     next_epoch_base_reward_cache.effective_balances.append(validator.effective_balance)\<close>
 
-definition "is_active_next_epoch (validator :: Validator) (epoch :: Epoch) = undefined"
+(* definition "is_active_next_epoch (validator :: Validator) (epoch :: Epoch) = (undefined :: bool)"*)
 
 definition process_epoch_single_pass :: "(unit, 'a) cont" 
   where "process_epoch_single_pass = do {
@@ -1177,7 +1179,7 @@ definition process_epoch_single_pass :: "(unit, 'a) cont"
      _  <- process_single_effective_balance_update balance validator validator_info nepb next_epoch_base_reward_cache effective_balances_ctxt state_ctxt c_p;
 
      v  <- read validator;
-     _  <- when (is_active_next_epoch v (next_epoch_f state_ctxt)) (next_epoch_num_active_validators := next_epoch_num_active_validators .+ 1);
+     _  <- when (is_active_validator v (next_epoch_f state_ctxt)) (next_epoch_num_active_validators := next_epoch_num_active_validators .+ 1);
      return ()
    });
   _ <- (progressive_balances_cache := return next_epoch_progressive_balances);
