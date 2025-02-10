@@ -14,6 +14,8 @@ type_synonym ExecutionAddress = "160 word"
 datatype Slot = Slot u64
 datatype Epoch = Epoch (raw_epoch: u64)
 
+
+
 datatype Hash256 = Hash256 "u8 list"
 datatype 'a Vector = Vector "'a list"
 datatype 'a VariableList = VariableList "'a list"

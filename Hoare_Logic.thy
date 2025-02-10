@@ -298,11 +298,8 @@ end
 
 instantiation BeaconState_ext :: (cancellative_sep_algebra) cancellative_sep_algebra begin
 
-find_theorems name: BeaconState "(?x :: 'e BeaconState_ext) = ?y" historical_roots_f_update
 instance
   apply (standard; (clarsimp simp: plus_BeaconState_ext_def sep_disj_BeaconState_ext_def zero_BeaconState_ext_def)?)
-  apply (simp add: sep_disj_positive)
-  apply (rule BeaconState.equality; clarsimp?)
   using Extended_Separation_Algebra.cancellative_sep_algebra_class.sep_add_cancelD apply blast+
   done
 end
@@ -1383,7 +1380,6 @@ lemma safe_sum_boundedI: "finite xs \<Longrightarrow> (\<And>x. Finite_Set.fold 
 
    apply (rule uadd_welldf)
    apply (clarsimp simp: foldr_map)
-  thm arg_cong
    apply (frule arg_cong[where f="u64_to_nat o the"], clarsimp)
   apply (subgoal_tac "foldr ((+) \<circ> u64_to_nat) x 0 = u64_to_nat (the (foldr (\<lambda>x acc. acc \<bind> (.+) x) x (Some (u64.u64 0))))")
   
@@ -1392,75 +1388,3 @@ lemma safe_sum_boundedI: "finite xs \<Longrightarrow> (\<And>x. Finite_Set.fold 
   by (metis insertCI list.simps(15) sorted_list_of_set.set_sorted_key_list_of_set)
 end
 end
-
-definition get_current_epoch :: "(Epoch, 'a) cont" where
-  "get_current_epoch \<equiv> do {
-     s <- read beacon_slots;
-     current_epoch <- lift_option ( (slot_to_u64 s) \\ SLOTS_PER_EPOCH config);
-     return (Epoch current_epoch)}"
-
-lemma get_total_active_balance_wp[wp]: 
- "(\<And>x. \<lblot>P x\<rblot> (c x) \<lblot>Q\<rblot>) \<Longrightarrow> (slot_to_u64 slots \\ SLOTS_PER_EPOCH config) = Some current_epoch \<Longrightarrow>
-  active_validators = [i. (i, v) \<leftarrow> enumerate (list_inner vs), is_active_validator v (Epoch current_epoch)] \<Longrightarrow>
-  s_balances = undefined \<Longrightarrow>
-  max (EFFECTIVE_BALANCE_INCREMENT config) s_balances = y \<Longrightarrow>   
-   \<lblot> (maps_to (validators) vs \<and>* maps_to beacon_slots slots \<and>* 
-     ((maps_to validators vs \<and>* maps_to beacon_slots slots)\<longrightarrow>* P y)) \<rblot>
-   do {x <- get_total_active_balance ; c x}
-   \<lblot>Q\<rblot>"
- apply (clarsimp simp: get_total_active_balance_def get_current_epoch_def)
-  apply (rule hoare_weaken_pre)
-   apply (wp)
-
-   apply (clarsimp simp: get_active_validator_indices_def, wp)
-   apply (clarsimp simp: get_total_balance_def, wp)
-  apply (clarsimp)
-  apply (sep_cancel)+
-  apply (safe, sep_cancel+)
-   apply (clarsimp)
-  apply (safe; clarsimp?)
-   apply (rule safe_sum_boundedI, rule finite_imageI)
-
-lemma get_total_active_balance_wp[wp]: 
- "\<lblot> (maps_to (validators) vs \<and>* maps_to beacon_slots slots \<and>* R) \<rblot>
-   get_total_active_balance \<lblot>(maps_to validators vs \<and>* maps_to beacon_slots slots \<and>* R)\<rblot>"
-  apply (clarsimp simp: get_total_active_balance_def get_current_epoch_def)
-  apply (rule hoare_weaken_pre)
-   apply (wp)
-   apply (clarsimp simp: get_active_validator_indices_def)
-   apply (clarsimp simp: get_total_balance_def, wp)
-  apply (clarsimp)
-  apply (sep_cancel)+
-  apply (safe, sep_cancel+)
-   apply (clarsimp)
-   apply (rule safe_sum_boundedI, rule finite_imageI)
-  apply (clarsimp)
-   apply (clarsimp)
-  sorry
-
-lemma  get_base_reward_per_increment_wp: 
- "\<lblot> (maps_to (validator index) v \<and>* R) \<rblot>
-                 (get_base_reward_per_increment )  \<lblot>(maps_to (validator index) v \<and>* R)\<rblot>"
-  apply (clarsimp simp: get_base_reward_per_increment_def)
-  apply (rule hoare_weaken_pre)
-
-  apply (wp)
-
-lemma get_base_reward_wp: 
-  "\<lblot> (maps_to (validator index) v \<and>* R) \<rblot>
-                 (get_base_reward index)  \<lblot>(maps_to (validator index) v \<and>* R)\<rblot>"
-  apply (clarsimp simp: get_base_reward_def)
-  apply (rule hoare_weaken_pre)
-
-   apply (wp)
-   apply (clarsimp simp: get_base_reward_per_increment_def get_total_active_balance_def get_current_epoch_def)
-  apply (wp)
-
-
-
-
-end
-
-
-end
-*)

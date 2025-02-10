@@ -73,6 +73,9 @@ definition bitvector_all :: "Bitvector \<Rightarrow> nat \<Rightarrow> nat \<Rig
   "bitvector_all bv start end \<equiv>
     list_all (\<lambda>x. x) (take (end - start) (drop start (bitvector_inner bv)))"
 
+definition lists_of :: "'b set \<Rightarrow> 'b list set"
+  where "lists_of S \<equiv> {xs. distinct xs \<and> list.set xs = S}"
+
 
 function integer_squareroot_aux :: "u64 \<Rightarrow> u64 \<Rightarrow> u64 \<Rightarrow> ((u64 \<times> u64), 'a) cont" where
   "integer_squareroot_aux x y n =

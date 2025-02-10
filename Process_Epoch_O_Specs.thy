@@ -1,22 +1,8 @@
 theory Process_Epoch_O_Specs
-imports ProcessEpoch_O sqrt_proof
+imports ProcessEpoch_O sqrt_proof Hoare_VCG
 begin
 
-instantiation Epoch :: plus
-begin
-definition "plus_Epoch x y \<equiv> Epoch (epoch_to_u64 x + epoch_to_u64 y)"
-instance
-  apply standard
-  done
-end
 
-instantiation Epoch :: one
-begin
-definition  "one_Epoch \<equiv> Epoch 1"
-instance
-  apply standard
-  done
-end
 
 
 locale extended_hl_pre =  extended_vc  + hoare_logic
@@ -38,6 +24,7 @@ lemma read_beacon_wp[wp]: "(\<And>x. x = v \<Longrightarrow> hoare_triple ( lift
     apply (rule order_trans, rule seq_mono_left)
      apply (rule test.hom_mono[where p="Collect (lift (P v))"])
      apply (clarsimp)
+  apply (sep_solve)
      apply (erule lift_mono, clarsimp, sep_solve)
     apply (blast)
   apply (subst seq_assoc[symmetric])
@@ -58,18 +45,7 @@ lemma read_beacon_wp[wp]: "(\<And>x. x = v \<Longrightarrow> hoare_triple ( lift
   apply (drule maps_to_get_wf, clarsimp)
   done
 
-lemma sub_wp[wp]: "hoare_triple (lift (P (n - m))) (c (n - m)) Q \<Longrightarrow>
-  hoare_triple (lift (\<lambda>s. n \<ge>  m \<and> (n \<ge>  m \<longrightarrow> P (n - m) s))) 
-(do {x <- (n .- m); c x}) Q"
-  apply (rule hoare_weaken_pre)
-   apply (clarsimp simp:  word_unsigned_sub_def )
-   apply (simp only: Let_unfold)
-   apply (wp, clarsimp simp: bindCont_return')
-  apply (safe)
-  by (simp add: word_sub_le_iff)
-  apply (erule notE)
-  apply (clarsimp simp: lift_def)
-  using word_sub_le_iff by blast
+
 
 
 lemma get_current_epoch_wp[wp]: "hoare_triple (lift (P (slot_to_epoch config v))) (f (slot_to_epoch config v)) Q \<Longrightarrow>
@@ -81,11 +57,6 @@ hoare_triple (lift (maps_to beacon_slots v \<and>* (maps_to beacon_slots v \<lon
   apply (rule order_refl)
   done
 
-lemma if_wp[wp]: 
-  "(B \<Longrightarrow> hoare_triple  ( lift S) ( bindCont P c) R) \<Longrightarrow> (\<not>B \<Longrightarrow> hoare_triple ( lift S') (bindCont Q c) R) \<Longrightarrow>
-   hoare_triple ( lift (if B then S else S'))  (do {x <- (if B then P else Q); c x}) R"
-  apply (clarsimp split: if_splits)
-  done
 
 lemma get_previous_epoch_wp':"(\<And>x. hoare_triple (lift (P x)) (f x) Q) \<Longrightarrow> hoare_triple (lift (maps_to beacon_slots v \<and>*
           (maps_to beacon_slots v \<longrightarrow>*
@@ -101,8 +72,6 @@ lemma get_previous_epoch_wp':"(\<And>x. hoare_triple (lift (P x)) (f x) Q) \<Lon
   apply (rule order_refl)
   done
 
-definition "previous_epoch epoch \<equiv> 
-    if epoch = GENESIS_EPOCH then GENESIS_EPOCH else Epoch (epoch_to_u64 epoch - 1)"
 
 
 lemma previous_genesis[simp]: "previous_epoch GENESIS_EPOCH = GENESIS_EPOCH"
@@ -112,7 +81,6 @@ lemma previous_is_self_simp[simp]: "previous_epoch e = e \<longleftrightarrow> e
   apply (clarsimp simp: previous_epoch_def GENESIS_EPOCH_def) 
   by (metis diff_0_right diff_left_imp_eq epoch_to_u64.simps zero_neq_one)
 
-declare lift_mono[elim!]
 
 lemma get_previous_epoch_wp[wp]:"hoare_triple (lift (P (previous_epoch (slot_to_epoch config v)))) (f (previous_epoch (slot_to_epoch config v))) Q \<Longrightarrow>
    hoare_triple (lift (maps_to beacon_slots v \<and>* (maps_to beacon_slots v \<longrightarrow>*
@@ -201,57 +169,6 @@ lemma get_previous_unslashed_participating_indices_wp[wp]:" (\<And>x. hoare_trip
 
 
 
-lemma add_zero_simp:"(bindCont ((a :: u64) .+ (0 :: u64)) f) = f a" sorry
-
-
-lemma unsigned_add_commute[intro]:" word_unsigned_add b a = a .+ b "
-  apply (rule ext; clarsimp simp: Let_unfold word_unsigned_add_def)
-  apply (safe; clarsimp simp: add.commute)
-  using olen_add_eqv apply auto[1]
-  using olen_add_eqv apply auto[1]
-  done
-
-
-
-lemma unsigned_word_add_shuffle:" bindCont (word_unsigned_add a  n) (\<lambda>y. bindCont (b .+ y) f) = bindCont (b .+ n) (\<lambda>y. bindCont ( a .+ y) f) "
-  apply (clarsimp simp: word_unsigned_add_def Let_unfold, safe; (clarsimp simp: bindCont_return' bindCont_return split: if_splits)?)
-      apply (simp add: add.left_commute)
-  using olen_add_eqv word_random apply blast
-  using olen_add_eqv word_random apply blast
-   apply (metis add.left_commute le_no_overflow)
-  by (simp add: add.left_commute le_no_overflow)
-
-
-lemma foldrM_elems_cons: "foldrM word_unsigned_add ([a,b]) n = foldrM word_unsigned_add ([b,a]) n"
-  apply (clarsimp simp: foldrM_cons)
-  using unsigned_word_add_shuffle 
-  by (metis bindCont_assoc bindCont_return)
-
-
-
-
-lemma word_unsigned_add_shuffle2: "bindCont (word_unsigned_add x y) (\<lambda>x. x .+ z) = bindCont (x .+ z) (\<lambda>x. x .+ y)"
-  apply (clarsimp simp: word_unsigned_add_def Let_unfold, safe; (clarsimp simp: bindCont_return' bindCont_return split: if_splits)?)
-      apply (simp add: add.commute add.left_commute)
-  apply (smt (verit, ccfv_threshold) no_olen_add word_le_def)
-    apply (metis (no_types, lifting) add.commute olen_add_eqv word_random)
-   apply (metis add.assoc add.commute olen_add_eqv word_plus_mono_right)
-  by (metis (no_types, opaque_lifting) add.commute group_cancel.add2 nle_le olen_add_eqv word_add_increasing word_plus_mcs_4')
-
-  
-
-lemma foldrM_shift: "foldrM word_unsigned_add (a#xs) n = (do {x <- foldrM word_unsigned_add (xs) n; word_unsigned_add x a})   "
-  apply (induct xs arbitrary: n a; clarsimp?)
-   apply (clarsimp simp: foldrM_def bindCont_return' k_comp_def bindCont_return)
-   apply (rule unsigned_add_commute)
-  apply (clarsimp simp: foldrM_cons)
-  apply (clarsimp simp: bindCont_assoc)
-  apply (subst bindCont_assoc[symmetric])
-  apply (subst bindCont_assoc[symmetric])
-  apply (rule bindCont_right_eqI)
-  apply (rule word_unsigned_add_shuffle2)
-  done
-
   
 lemma unat_sum_list_simp:"sum_list (map unat xs) \<le> 2^64 - 1 \<Longrightarrow> unat (sum_list (xs :: u64 list)) = sum_list (map unat xs)"
   apply (induct xs; clarsimp)
@@ -280,10 +197,6 @@ lemma sum_list_wp[wp]: "hoare_triple (lift (P (sum_list xs))) (f (sum_list xs)) 
   apply (clarsimp)
   done
 
-
-
-
-definition "lists_of S \<equiv> {xs. distinct xs \<and> list.set xs = S}"
 
 lemma maps_to_is_valid:"(maps_to l v \<and>* R) s \<Longrightarrow> valid (l) (Some v)"
   apply (clarsimp simp: sep_conj_def maps_to_def )
@@ -321,7 +234,7 @@ lemma sum_list_map_leI:"(\<And>x. count_list ys x \<ge> count_list xs x) \<Longr
    apply (erule_tac x=x in allE)
    apply (clarsimp split: if_splits)
     apply (erule count_list_remove1)
-   apply (subst sum_list_map_remove1[where x=a]) back
+   apply (subst sum_list_map_remove1) back
     apply (erule_tac x=a in allE; clarsimp)
   apply (erule count_ge_suc_in_set)
   using add_left_mono apply blast
@@ -379,18 +292,8 @@ lemma index_in_length_in_set[intro!]: "xb < var_list_len v \<Longrightarrow> loc
   apply (case_tac v; clarsimp)
   by (simp add: unat_less_helper)
 
-find_theorems select
 
-
-lemma select_wp_lift[wp]: "(\<And>x. x \<in> P \<Longrightarrow> hoare_triple (lift (pre x)) (f x) Q) \<Longrightarrow> hoare_triple (lift (\<lambda>s. \<forall>x\<in>P. pre x s)) (do {x <- select P; f x}) Q"
-  apply (clarsimp simp: select_def bindCont_def hoare_triple_def run_def)
-  apply (subst Sup_le_iff)
-  apply (clarsimp)
-  apply (atomize, erule allE, drule mp, assumption)
-  apply (erule order_trans)
-  apply (rule seq_mono_left)
-  by (subst assert_iso[symmetric], clarsimp)
-
+declare range.simps[simp del ]
 
 lemma get_total_balance_wp[wp]:"(\<And>x xs (v :: Validator VariableList). distinct xs \<Longrightarrow> list.set xs = S \<Longrightarrow> x = max (EFFECTIVE_BALANCE_INCREMENT config) (sum_list (map (Validator.effective_balance_f \<circ> unsafe_var_list_index v) xs)) \<Longrightarrow>
     hoare_triple (lift (P x)) (f x) Q) 
@@ -401,8 +304,7 @@ lemma get_total_balance_wp[wp]:"(\<And>x xs (v :: Validator VariableList). disti
    apply (clarsimp)
    apply (atomize)
    apply (erule_tac allE)
-   apply (erule_tac x=aa in allE)
-  apply (erule_tac x=a in allE)
+   apply (erule_tac x=a in allE)
    apply (fastforce)
   apply (clarsimp)
   apply (sep_cancel)
@@ -442,122 +344,25 @@ lemma gen_epoch_add_zero[simp]:" epoch_unsigned_add GENESIS_EPOCH x = return x"
   apply (intro ext, clarsimp simp: return_def epoch_unsigned_add_def bindCont_def word_unsigned_add_def)
   by (metis Epoch.collapse epoch_to_u64.simps)
 
-lemma lift_option_wp[wp]: "(\<And>x. v = Some x \<Longrightarrow> hoare_triple (lift (P x)) (f x) Q) \<Longrightarrow> 
-  hoare_triple (lift (\<lambda>s. v \<noteq> None \<and> (v \<noteq> None \<longrightarrow> P (the v) s))) (do {b <- lift_option v; f b}) Q"
-  apply (unfold lift_option_def)
-  apply (rule hoare_assert_stateI, clarsimp)
-  apply (intro conjI impI)
-   apply (clarsimp simp: lift_def)
-  apply (clarsimp simp: lift_def)
-  apply (rule hoare_weaken_pre, assumption)
-  apply (clarsimp)
-  apply (clarsimp simp: lift_def)
-  apply (blast)
-  done
 
-lemma getState_wp_spec[wp]: " (\<And>s. hoare_triple (P s) (c s) Q) \<Longrightarrow> 
-  hoare_triple (\<lambda>x. P x x) (bindCont getState c) Q"
-  apply (clarsimp simp: getState_def hoare_triple_def bindCont_def run_def Sup_le_iff assert_galois_test test_restricts_Nondet)
-  apply (atomize)
-  apply (erule_tac x=a in allE)
-  apply (erule_tac x=b in allE)
-  apply (erule order_trans[rotated])
-  using seq_mono_left test.hom_mono by force
-
-lemma getState_wp_alt: "(\<And>s. P s \<Longrightarrow> hoare_triple ((=) s) (c s) Q) \<Longrightarrow> 
-  hoare_triple P (bindCont getState c) Q "
-  by (clarsimp simp: getState_def hoare_triple_def bindCont_def run_def Sup_le_iff assert_galois_test test_restricts_Nondet)
-
-
-lemma hoare_subgoalI: "(\<And>s. P \<Longrightarrow> hoare_triple P' f Q) \<Longrightarrow> hoare_triple (\<lambda>s. P  \<and> (P  \<longrightarrow> P' s)) f Q"
-  apply (rule hoare_assert_stateI)
-  apply (rule hoare_weaken_pre)
-   apply (clarsimp)
-   apply (assumption)
-  apply (clarsimp)
-  done
 
 lemma [simp]: "((\<lambda>a. the (u64_of a)) \<circ> u64) = id "
   by (intro ext; clarsimp)
 
-text \<open>lemma translate_ProgressiveBalancesCacheI:"(extended_vc.maps_to current_epoch_flag_attesting_balances (list (map u64 (current_epoch_flag_attesting_balances_f pbc))) \<and>*
-        extended_vc.maps_to previous_epoch_flag_attesting_balances (list (map u64 (previous_epoch_flag_attesting_balances_f pbc))) \<and>*
-        extended_vc.maps_to total_active_balance (u64 (total_active_balance_f pbc)) \<and>*
-        extended_vc.maps_to progressive_balances_cache (list [ptr total_active_balance, ptr previous_epoch_flag_attesting_balances, ptr current_epoch_flag_attesting_balances])) s \<Longrightarrow> translate_ProgressiveBalancesCache progressive_balances_cache pbc s"
-  apply (clarsimp simp: translate_ProgressiveBalancesCache_def)
-  apply (intro exI)
-  apply (sep_solve)
-  done
-\<close>
+
 lemma [simp]: "ProgressiveBalancesCache.fields (total_active_balance_f pbc) (previous_epoch_flag_attesting_balances_f pbc) (current_epoch_flag_attesting_balances_f pbc) = pbc"
   by (clarsimp simp: ProgressiveBalancesCache.defs)
 
-text \<open>lemma read_ProgressiveBalancesCache_wp[wp]:"hoare_triple (P pbc) (f pbc) Q \<Longrightarrow> 
-hoare_triple (translate_ProgressiveBalancesCache progressive_balances_cache pbc \<and>* (translate_ProgressiveBalancesCache progressive_balances_cache pbc \<longrightarrow>* P (pbc)))  
-  (do {b <- read_ProgressiveBalancesCache progressive_balances_cache; f b}) Q" 
-  apply (rule hoare_assert_stateI)
-  apply (subst (asm) translate_ProgressiveBalancesCache_def)
-  apply (clarsimp simp: sep_conj_exists1)
-  find_theorems "((\<lambda>s. \<exists>x. ?f x s) \<and>* ?R)" 
-  apply (rule hoare_weaken_pre, unfold read_ProgressiveBalancesCache_def, wp)
-     apply (rule_tac v=xb and x="(map u64 (previous_epoch_flag_attesting_balances_f pbc))" in  hoare_eqI)
-   apply (simp)
-   apply (wp)
 
-   apply (rule mapM_wp[where g="the o u64_of"])
-     apply (simp only: comp_def)
-     apply (rule_tac v="(u64_of xc)" in lift_option_wp)
-     apply (clarsimp)
-     apply (assumption)
-  apply (clarsimp)
-     apply (erule hoare_eqI)
-    apply (wp)
-     apply (rule_tac v=xc and x="(map u64 (current_epoch_flag_attesting_balances_f pbc))" in  hoare_eqI)
-
-   apply (rule mapM_wp[where g="the o u64_of"])
-     apply (simp only: comp_def)
-
-      apply (rule_tac v="(u64_of xd)" in lift_option_wp)
-    apply (clarsimp)
-  apply (assumption)
-    apply (clarsimp)
-   apply (clarsimp)
-     apply (erule hoare_eqI)
-
-    apply (clarsimp)
-    apply (safe)
-    apply (sep_cancel)+
-    apply (clarsimp)
-    apply (sep_cancel)+
-  apply (clarsimp)
-  apply (intro conjI impI; clarsimp?)
-
-    apply (sep_cancel)+
-    apply clarsimp
-   apply (intro conjI impI)
-    apply (sep_drule translate_ProgressiveBalancesCacheI, assumption)
-   apply (sep_drule translate_ProgressiveBalancesCacheI, assumption)
-    apply (sep_cancel)+
-
-  apply (intro conjI impI)
-      apply (sep_drule translate_ProgressiveBalancesCacheI, assumption)
-      apply (sep_drule translate_ProgressiveBalancesCacheI, assumption)
-  apply (clarsimp)
-  done
-
-  \<close>
 lemma process_fast_spec: "hoare_triple (lift (maps_to beacon_slots b \<and>* maps_to progressive_balances_cache pbc \<and>* R)) process_justification_and_finalization_fast
    (lift (maps_to beacon_slots b \<and>* maps_to progressive_balances_cache pbc \<and>* R))"
   apply (unfold process_justification_and_finalization_fast_def, rule hoare_weaken_pre, wp)
    apply (simp only: gen_epoch_add_zero)
    apply (wp)
    apply (clarsimp)
-   apply (wp)
   apply (safe)
-  apply (sep_cancel)+
-  apply (clarsimp)
-  apply (sep_cancel)+
-  done
+  by (sep_cancel)+
+
 
 lemma active_validator_indices_are_bound: "x \<in> list.set (active_validator_indices e v) \<Longrightarrow> length (local.var_list_inner v) \<le> 2 ^ 64 - 1 \<Longrightarrow> x < var_list_len v"
   apply (clarsimp simp: active_validator_indices_def)
@@ -565,11 +370,6 @@ lemma active_validator_indices_are_bound: "x \<in> list.set (active_validator_in
   apply (clarsimp)
   done
 
-lemma [simp]: "Epoch x \<le> Epoch y \<longleftrightarrow> x \<le> y"
-  by (safe; clarsimp simp: less_eq_Epoch_def)
-
-lemma [simp]: "epoch_to_u64 GENESIS_EPOCH = 0"
-  by (clarsimp simp: GENESIS_EPOCH_def)
 
 lemma "hoare_triple (lift (maps_to beacon_slots b \<and>* maps_to previous_epoch_participation pep \<and>*
    maps_to current_epoch_participation cep \<and>*  maps_to validators v \<and>*  R \<and>* R')) process_justification_and_finalization (lift (maps_to beacon_slots b \<and>* maps_to validators v \<and>*  maps_to previous_epoch_participation pep \<and>* maps_to current_epoch_participation cep \<and>* R \<and>* R'))"
@@ -613,24 +413,12 @@ lemma "hoare_triple (lift (maps_to beacon_slots b \<and>* maps_to previous_epoch
   apply (case_tac v; clarsimp)
   done
 
-lemma div_wp_lift: "hoare_triple (lift (P (n div m))) (c (n div m)) Q \<Longrightarrow>
-  hoare_triple (lift (\<lambda>s. m \<noteq> 0 \<and> (m \<noteq> 0 \<longrightarrow>  (P ( n div m)) s))) 
-(do {x <- (word_unsigned_div n m); c x}) Q"
-  apply (rule hoare_weaken_pre)
-   apply (unfold word_unsigned_div_def, wp)
-  apply (clarsimp simp: bindCont_return')
-  apply (clarsimp simp: lift_def)
-  done
-
-find_theorems name:div_wp
 
 lemma [simp]: "CHURN_LIMIT_QUOTIENT config \<noteq> 0" sorry
 
 lemma get_validator_churn_limit_fast_spec: "hoare_triple (\<lless>num_active_validators \<mapsto>\<^sub>l n \<and>* R\<then>) get_validator_churn_limit_fast (lift (num_active_validators \<mapsto>\<^sub>l n \<and>* R))"
   apply (clarsimp simp: get_validator_churn_limit_fast_def, rule hoare_weaken_pre)
    apply (wp)
-   apply (rule div_wp_lift)
-   apply (rule return_wp)
   apply (clarsimp)
   apply (sep_solve)
   done
@@ -640,17 +428,11 @@ lemma get_validator_churn_limit_fast_wp[wp]: "(\<And>x. hoare_triple (lift (P x)
       (bindCont get_validator_churn_limit_fast c) (Q)"
   apply (clarsimp simp: get_validator_churn_limit_fast_def, rule hoare_weaken_pre)
    apply (wp)
-   apply (rule div_wp_lift)
-  apply (fastforce)
-  apply (clarsimp)
-  apply (sep_cancel)+
-  done
+  by (fastforce)
 
 lemma get_validator_churn_limit_spec: "hoare_triple (\<lless>beacon_slots \<mapsto>\<^sub>l v \<and>* validators \<mapsto>\<^sub>l vs \<and>*  R\<then>) get_validator_churn_limit (lift (beacon_slots \<mapsto>\<^sub>l v \<and>* validators \<mapsto>\<^sub>l vs \<and>* R))"
   apply (clarsimp simp: get_validator_churn_limit_def, rule hoare_weaken_pre)
    apply (wp)
-   apply (rule div_wp_lift)
-   apply (rule return_wp)
   apply (clarsimp)
   apply (sep_cancel)+
   done
@@ -659,46 +441,10 @@ lemma get_validator_churn_limit_spec': "(\<And>x. hoare_triple (lift (P x)) (c x
    hoare_triple (\<lless>beacon_slots \<mapsto>\<^sub>l v \<and>* validators \<mapsto>\<^sub>l vs \<and>* (beacon_slots \<mapsto>\<^sub>l v \<and>* validators \<mapsto>\<^sub>l vs \<longrightarrow>* P (max (MIN_PER_EPOCH_CHURN_LIMIT config) (word_of_nat (length (active_validator_indices (slot_to_epoch config v) vs)) div CHURN_LIMIT_QUOTIENT config))) \<then>) (bindCont get_validator_churn_limit c) (Q)"
   apply (clarsimp simp: get_validator_churn_limit_def, rule hoare_weaken_pre)
    apply (wp)
-   apply (rule div_wp_lift)
-  apply (assumption)
   apply (clarsimp)
   apply (sep_cancel)+
   apply (sep_mp)
   apply (sep_cancel)+
-  done
-
-lemma [simp]: "\<lless>\<lambda>s. P\<then> = (\<lambda>s. P)" 
-  apply (intro ext, clarsimp simp: lift_def)  
-  apply (safe)
-  apply (rule_tac x="id_p" in exI)
-  by simp
-
-lemma add_wp[wp]: "hoare_triple (lift (P (n + m))) (c (n + m)) Q \<Longrightarrow>
-  hoare_triple (lift (\<lambda>s. n \<le> n + m \<and> (n \<le> n + m \<longrightarrow> P (n + m) s))) 
-(do {x <- (word_unsigned_add n  m); c x}) Q"
-  apply (rule hoare_weaken_pre)
-   apply (clarsimp simp:  word_unsigned_add_def )
-   apply (simp only: Let_unfold)
-   apply (wp, clarsimp simp: bindCont_return')
-  done
-
-lemma mod_wp[wp]: "hoare_triple (lift (P (n mod m))) (c (n mod m)) Q \<Longrightarrow>
-  hoare_triple (lift (\<lambda>s. m \<noteq> 0 \<and> (m \<noteq> 0 \<longrightarrow> P (n mod m) s)))
-(do {x <- (n .% m); c x}) Q"
-  apply (rule hoare_weaken_pre)
-   apply (unfold word_unsigned_mod_def)
-   apply wp
-  apply fastforce
-  done
-
-find_theorems name:if_wp
-
-thm wp
-
-lemma when_wp[wp]: 
-  "(B \<Longrightarrow> hoare_triple  ( lift S) ( bindCont P c) R) \<Longrightarrow> (\<not>B \<Longrightarrow> hoare_triple ( lift S') (c ()) R) \<Longrightarrow>
-   hoare_triple ( lift (if B then S else S'))  (do {x <- (when B P); c x}) R"
-  apply (clarsimp split: if_splits)
   done
 
 definition "next_epoch b_slots \<equiv> epoch_to_u64 (slot_to_epoch config b_slots) + 1"
@@ -718,13 +464,11 @@ lemma process_eth1_data_reset: "hoare_triple (lift (beacon_slots \<mapsto>\<^sub
     apply (clarsimp)
     apply (clarsimp simp: slot_to_epoch_def)
     apply (subgoal_tac "SLOTS_PER_EPOCH config > 1")
-     apply (metis bits_div_0 div_less_dividend_word less_is_non_zero_p1 lt1_neq0 olen_add_eqv word_less_1 zero_neq_one)
+  apply (metis (no_types, opaque_lifting) div_by_0 div_less_dividend_word div_word_self less_is_non_zero_p1 lt1_neq0 olen_add_eqv word_div_lt_eq_0)
     apply (clarsimp)
   apply (clarsimp)
   apply (clarsimp simp: next_epoch_def)
   by (sep_cancel)+
-
-thm get_previous_epoch_wp
 
 definition "previous_epochs bs = {e. e \<le> previous_epoch (slot_to_epoch config bs)}"
 
@@ -749,23 +493,12 @@ lemma get_finality_delay_wp[wp]:
   using less_eq_Epoch_def apply blast
    apply (clarsimp)
    apply (sep_mp)
-   apply (clarsimp simp: raw_epoch_simp)
-   apply (clarsimp simp: raw_epoch_simp)
-  done
+  by (clarsimp simp: raw_epoch_simp)
+
 
 
 abbreviation (input) "sep_wp pre post P \<equiv> (lift (pre \<and>* (post \<longrightarrow>* P)))"
 
-lemma lift_pure_conj[simp]: "lift (\<lambda>s. P \<and> Q s) s = (P \<and> lift Q s)"
-  by (clarsimp simp: lift_def)
-
-lemma lift_pure_imp[simp]: "lift (\<lambda>s. P \<longrightarrow> Q s) s = (P \<longrightarrow> lift Q s)"
-  apply (clarsimp simp: lift_def)
-  apply (safe, blast)
-  apply (rule_tac x=id_p in exI)
-   apply (clarsimp)
-  apply (blast)
-  done
 
 
 schematic_goal is_in_activity_leak[wp]:
@@ -792,31 +525,12 @@ schematic_goal is_in_activity_leak[wp]:
 
 lemma epoch_always_bounded[simp]: "epoch_to_u64 (slot_to_epoch config v) \<le> epoch_to_u64 (slot_to_epoch config v) + 1"
   apply (clarsimp simp: slot_to_epoch_def)
-  by (metis (no_types, opaque_lifting) SLOTS_PER_EPOCH_ATLEAST add.commute
-             bits_div_0 div_less_dividend_word inc_i le_no_overflow lt1_neq0
-                                    verit_comp_simplify1(2) word_le_not_less)
+  by (metis (no_types, opaque_lifting) SLOTS_PER_EPOCH_ATLEAST div_0 div_by_1 div_less_dividend_word 
+         less_is_non_zero_p1 lt1_neq0 olen_add_eqv word_div_less zero_neq_one)
 
 
 lemma subst_in_impl: "(x = y \<longrightarrow> f y) = (x = y \<longrightarrow> f x)"
   by (safe)
-
-lemma hoare_eqI': "hoare_triple (lift (P x)) (f x) Q \<Longrightarrow> hoare_triple (lift (\<lambda>s. v = x \<and> (v = x \<longrightarrow> P v s))) (f v) Q"
-  apply (rule hoare_assert_stateI)
-  apply (clarsimp)
-  apply (clarsimp simp: lift_def)
-  apply (erule hoare_weaken_pre)
-  apply (clarsimp simp: lift_def)
-  apply (blast)
-  done
-
-lemma hoare_eqI'': "hoare_triple (lift (P x v)) (f x) Q \<Longrightarrow> hoare_triple (lift (\<lambda>s. v = x \<and> (v = x \<longrightarrow> P x v s))) (f v) Q"
-  apply (rule hoare_assert_stateI)
-  apply (clarsimp)
-  apply (clarsimp simp: lift_def)
-  apply (erule hoare_weaken_pre)
-  apply (clarsimp simp: lift_def)
-  apply (blast)
-  done
 
 schematic_goal new_state_context_wp[simplified subst_in_impl, wp]: 
  "hoare_triple (lift (pre ?x)) (c ?x) post \<Longrightarrow> hoare_triple (lift ?P) (bindCont new_state_context c) (post)"
@@ -827,36 +541,6 @@ schematic_goal new_state_context_wp[simplified subst_in_impl, wp]:
   apply (sep_cancel)+
   done
 
-definition "safe_mul m n \<equiv> if (m = 0 \<or> n = 0) then True else (m * n div n = m)"
-
-lemma fail_wp[wp]: "\<lblot>lift \<bottom>\<rblot> bindCont fail c \<lblot>Q\<rblot>"
-  apply (rule hoare_weaken_pre, wp)
-  apply (clarsimp simp: lift_def)
-  done
-
-thm mul_wp
-
-lemma mul_wp[wp]: "hoare_triple (lift (P (n * m))) (c (n * m)) Q \<Longrightarrow>
-  hoare_triple (lift (\<lambda>s. safe_mul m n  \<and> (safe_mul m n  \<longrightarrow> P (n * m) s))) 
-(do {x <- (word_unsigned_mul n m); c x}) Q"
-  apply (rule hoare_weaken_pre)
-   apply (unfold  word_unsigned_mul_def )
-   apply (simp only: Let_unfold)
-   apply (rule if_wp, simp)
-    apply (fastforce)
-   apply (rule if_wp, simp)
-   apply (wp)
-  apply (clarsimp simp: safe_mul_def)
-  apply (intro conjI impI; clarsimp?)
-  by (simp add: mult.commute)
-
-lemma div_wp[wp]: "hoare_triple (lift (P (n div m))) (c (n div m)) Q \<Longrightarrow>
-  hoare_triple (lift (\<lambda>s. m \<noteq> 0 \<and> (m \<noteq> 0 \<longrightarrow> P ( n div m) s))) 
-(do {x <- (word_unsigned_div n m); c x}) Q"
-  apply (rule hoare_weaken_pre)
-   apply (unfold word_unsigned_div_def, wp)
-   apply (clarsimp simp: bindCont_return')
-  done
 
 lemma slashings_wf: "(slashings \<mapsto>\<^sub>l ss \<and>* R) s \<Longrightarrow> 
 sum_list (map unat (local.vector_inner ss)) \<le> 2 ^ 64 - 1 \<and> 
@@ -929,54 +613,7 @@ lemma  new_exit_cache_wp[wp]: "
   done
 
 
-lemma mapM_wp'':
-  assumes c_wp: "\<And>(f :: 'e \<Rightarrow> ('f, 'a) cont) x P Q.  (\<And>xs. hoare_triple (lift (P (g x))) (f (g x)) ( Q)) \<Longrightarrow> hoare_triple (lift (pre x)) (do { b <- c x; f b}) Q"  
-shows "  (\<And>x y. hoare_triple (lift (P x)) (f y) Q) \<Longrightarrow>   hoare_triple (lift (\<lambda>s. (\<forall>x\<in>list.set xs. pre x s) \<and> ((\<forall>x\<in>list.set xs. pre x s) \<longrightarrow> P (map g xs) s))) (do {vs <- mapM c (xs :: 'd list) ; (f :: 'e list \<Rightarrow> ('f, 'a) cont) (vs )}) Q"
-  apply (induct xs arbitrary: f)
-   apply (simp)
-  apply (clarsimp)
-  apply (rule hoare_weaken_pre)
-  apply (clarsimp simp: bindCont_assoc[symmetric])
-   apply (rule c_wp)
-  defer
-    apply (clarsimp)
-  defer
-  apply (atomize)
-  apply (erule_tac x="(\<lambda>aa. f (g a # aa))" in allE)
-  apply (drule mp)
-   apply (clarsimp)
-  apply (fastforce)
-  done
 
-thm mapM_wp
-
-term "foldr (\<lambda>x R. pre' R x) xs"
-
-lemma mapM_wp_foldr:
-  assumes c_wp: "\<And>(f :: 'e \<Rightarrow> ('f, 'a) cont) x P Q. (\<And>x. hoare_triple (lift (P)) (f x) (Q)) \<Longrightarrow> hoare_triple (lift (pre P x)) (do { b <- c x; f b}) Q"  
-shows " (\<And>x. hoare_triple (lift (P)) (f x) Q) \<Longrightarrow>   hoare_triple (lift (foldr (\<lambda>x R. pre R x) xs P )) (do {vs <- mapM c (xs :: 'd list) ; (f :: 'e list \<Rightarrow> ('f, 'a) cont) (vs )}) Q"
-  apply (induct xs arbitrary: f; clarsimp)
-  by (metis (no_types, lifting) bindCont_assoc c_wp return_triple')
-
-lemma mapM_wp':
-  assumes c_wp: "\<And>(f :: 'e \<Rightarrow> ('f, 'a) cont) x P Q. hoare_triple (lift P) (f (g x)) ( Q) \<Longrightarrow> hoare_triple (lift (pre P x)) (do { b <- c x; f b}) Q"  
-  assumes pre_mono: "(\<And>x P Q s . (P s  \<Longrightarrow> Q s) \<Longrightarrow>  (pre P x) s \<Longrightarrow>  (pre Q x) s  )"
-shows " hoare_triple (lift P) (f (map g xs)) Q \<Longrightarrow>   hoare_triple (lift (\<lambda>s. (\<Sqinter>x\<in>(list.set xs). pre P x) s \<and> ((\<Sqinter>x\<in>(list.set xs). pre P x) s \<longrightarrow> P s))) (do {vs <- mapM c (xs :: 'd list) ; (f :: 'e list \<Rightarrow> ('f, 'a) cont) (vs )}) Q"
-  apply (induct xs arbitrary: f; clarsimp)
-  apply (atomize)
-  apply (clarsimp simp: bindCont_assoc[symmetric])
-  apply (rule hoare_weaken_pre)
-  apply (rule c_wp)
-  apply (erule allE)
-  apply (erule impE)
-   defer
-    apply (assumption)
-   apply (clarsimp)
-   apply (rule pre_mono[rotated], assumption)
-   apply (clarsimp)
-  
-  apply (clarsimp)
-  done
 
 lemma ebi_not_zero[intro]: "EFFECTIVE_BALANCE_INCREMENT config \<noteq> 0" sorry
 
@@ -986,22 +623,9 @@ lemma brf_ebi_times_bounded[simp]:
        BASE_REWARD_FACTOR config" sorry
 
 lemma sqrt_eq_zero_iff[simp]: "sqrt' x = 0 \<longleftrightarrow> x = 0"
-  by (metis (no_types, opaque_lifting) add_0 bits_div_by_1
-   comm_monoid_mult_class.mult_1 linorder_not_le lt1_neq0 
-       sqrt_induct sqrt_le sub_wrap word_not_simps(1))
+  by (metis div_by_1 lt1_neq0 mult.right_neutral sqrt_le_eqI word_coorder.extremum zero_sqrt_zero)
 
-definition "mul_bound x y \<equiv> y = x * y div x"
 
-lemma safe_mul_commute: "safe_mul (x :: u64) y = safe_mul y x"
-  apply (clarsimp simp: safe_mul_def)
-  apply (safe)
-   apply (unat_arith, simp)
-   apply (metis (no_types, lifting) bot_nat_0.not_eq_extremum div_mult_le mult.commute
-        nonzero_mult_div_cancel_left order_le_less_trans unat_mult_lem unsigned_less)
- apply (unat_arith, simp)
-   apply (metis (no_types, lifting) bot_nat_0.not_eq_extremum div_mult_le mult.commute
-        nonzero_mult_div_cancel_left order_le_less_trans unat_mult_lem unsigned_less)
-  done
 
 schematic_goal get_base_reward_fast_wp[wp]:
  "hoare_triple (lift (P x)) (c x) Q \<Longrightarrow> hoare_triple (lift (\<lambda>s. total_active_balance_f pbc < total_active_balance_f pbc + 1 \<and>
@@ -1022,25 +646,7 @@ schematic_goal get_base_reward_fast_wp[wp]:
    apply (metis brf_ebi_times_bounded mult.commute safe_mul_def)
   using safe_mul_commute by blast
 
-lemma nonempty_ball_conj_lift: "S \<noteq> {} \<Longrightarrow> (\<forall>x\<in>S. P \<and> Q x) = (P \<and> (\<forall>x\<in>S. Q x))"
-  by (safe; clarsimp?)
 
-
-lemma nonempty_ball_imp_lift: "S \<noteq> {} \<Longrightarrow> (\<forall>x\<in>S. P \<longrightarrow> Q x) = (P \<longrightarrow> (\<forall>x\<in>S. Q x))"
-  by (safe; clarsimp?)
-
-lemma effective_balance_safe[simp]:
- "MAX_EFFECTIVE_BALANCE \<le> MAX_EFFECTIVE_BALANCE + EFFECTIVE_BALANCE_INCREMENT config" sorry 
-
-lemma range_empty_iff: " (range x y z) = [] \<longleftrightarrow> (x \<ge> y) \<or> z = 0"
-  apply (case_tac z; clarsimp)
-  done 
-
-lemma start_in_valid_range[simp]: "range x y z \<noteq> [] \<Longrightarrow> x \<in> list.set (range x y z)"
-  apply (clarsimp simp: range_empty_iff)
-  by (case_tac z; clarsimp?)
-
-lemma EBI_ge_zero[intro]: "EFFECTIVE_BALANCE_INCREMENT config > 0" sorry
 
 schematic_goal compute_base_rewards_wp[wp]:
  "(\<And>x. hoare_triple (lift (P x)) (c x) Q) \<Longrightarrow> 
@@ -1074,80 +680,13 @@ schematic_goal compute_base_rewards_wp[wp]:
   apply (clarsimp simp: range_empty_iff)
   by (metis (mono_tags, opaque_lifting) add_0
            ebi_not_zero effective_balance_safe gr0I unat_eq_zero word_coorder.extremum_uniqueI)
-  
 
-lemma read_beacon_wp_alt[wp]: "(\<And>x. hoare_triple ( lift (P x)) (c x) (Q )) \<Longrightarrow>
-   hoare_triple (lift (maps_to l v \<and>* (maps_to l v \<longrightarrow>* (\<lambda>s. x = v \<and> (x = v \<longrightarrow> (P v s)))))) 
-  (do {v <- read_beacon l ; c v}) (Q  )"
-  apply (clarsimp simp: hoare_triple_def bindCont_def run_def read_beacon_def getState_def )
-  apply (clarsimp simp: Sup_le_iff)
-  apply (safe)
-   apply (clarsimp simp: fail_def assert_galois_test)
-   defer
-   apply (clarsimp simp: fail_def assert_galois_test return_def)
-   apply (case_tac "y = v"; clarsimp?)
-    apply (subst seq_assoc[symmetric])
-    apply (subst test_seq_test)
-    apply (rule order_trans, rule seq_mono_left)
-     apply (rule test.hom_mono[where p="Collect (lift (P v))"])
-     apply (clarsimp)
-  apply (sep_select_asm 2)
-     apply (frule sep_mp)
-  apply (clarsimp)
-  apply (sep_mp, clarsimp)
-     apply (erule lift_mono, clarsimp, sep_solve)
-    apply (blast)
-  apply (subst seq_assoc[symmetric])
-   apply (subst test_seq_test)
- apply (rule order_trans, rule seq_mono_left)
-    apply (rule test.hom_mono[where p="{}"])
-    apply (clarsimp)
-    defer
-    apply (clarsimp)
-  apply (subst seq_assoc[symmetric])
-   apply (subst test_seq_test)
- apply (rule order_trans, rule seq_mono_left)
-    apply (rule test.hom_mono[where p="{}"])
-    apply (clarsimp)
-    defer
-     apply (clarsimp)
-  sorry
-   apply (drule maps_to_get_wf, clarsimp)
-  apply (drule maps_to_get_wf, clarsimp)
-  done
+
 
 abbreviation "map_var f vs \<equiv> map f (var_list_inner vs)"
 
-text \<open>[where x=x and v="\<lparr> effective_balances_f = (map_var Validator.effective_balance_f vs), 
-      base_rewards_f = (map (\<lambda>effective_balance.
-                             word_of_nat effective_balance div EFFECTIVE_BALANCE_INCREMENT config * (EFFECTIVE_BALANCE_INCREMENT config * BASE_REWARD_FACTOR config div sqrt' (total_active_balance_f pbc)))
-                      (local.range 0 (unat (MAX_EFFECTIVE_BALANCE + EFFECTIVE_BALANCE_INCREMENT config)) (unat (EFFECTIVE_BALANCE_INCREMENT config)))) \<rparr>"\<close>
 
 
-thm hoare_assert_stateI
-
-lemma hoare_eqI''': "hoare_triple (lift (P x)) (f x) Q \<Longrightarrow> v = x \<Longrightarrow>  hoare_triple (lift (P v)) (f v) Q"
-  apply (rule hoare_assert_stateI)
-  apply (clarsimp)
-  apply (clarsimp simp: lift_def)
-  apply (erule hoare_weaken_pre)
-  apply (clarsimp simp: lift_def)
-  apply (blast)
-  done
-
-lemma hoare_eqI_weaken: "hoare_triple (lift (P x)) (f x) Q \<Longrightarrow> (\<And>s. P' v s \<Longrightarrow> P x s) \<Longrightarrow> hoare_triple (lift (\<lambda>s. x = v \<and> (x = v \<longrightarrow> P' v s))) (f v) Q"
-  apply (rule hoare_assert_stateI)
-  apply (clarsimp)
-  apply (clarsimp simp: lift_def)
-  apply (erule hoare_weaken_pre)
-  apply (clarsimp simp: lift_def)
-  apply (blast)
-  done
-
-lemma read_beacon_wp'[wp]: "(\<And>x. hoare_triple ( lift (P x)) (c x) (Q )) \<Longrightarrow> 
-hoare_triple (lift (maps_to l v \<and>* (maps_to l v \<longrightarrow>*  (P v )))) (do {v <- read_beacon l ; c v}) (Q  )"
-  apply (wp)
-  done
 
 definition "base_rewards_from_cache pbc \<equiv>
 map (\<lambda>effective_balance. word_of_nat effective_balance div EFFECTIVE_BALANCE_INCREMENT config *
@@ -1195,18 +734,12 @@ lemma get_total_active_balance_wp[wp]:"(\<And>x. hoare_triple (lift (P x)) (c x)
   apply (sep_mp, clarsimp)
   done
 
-find_theorems get_unslashed_participating_indices
-
-thm get_current_unslashed_participating_indices_wp
-
-
 abbreviation "current_epoch bs \<equiv> slot_to_epoch config bs"
 
 definition "unslashed_participating_indices flag_index epoch epoch_participation vs  \<equiv>
             {x \<in> list.set (active_validator_indices epoch vs). 
              has_flag (unsafe_var_list_index epoch_participation x) flag_index \<and> 
-             \<not> slashed_f (unsafe_var_list_index vs x)} 
-            "
+             \<not> slashed_f (unsafe_var_list_index vs x)}  "
 
 lemma get_flag_attesting_balance_current_epoch_wp: 
   "(\<And>x. hoare_triple (lift (P x)) (c x) Q) \<Longrightarrow>
@@ -1396,74 +929,6 @@ apply (sep_cancel)+
   apply (clarsimp)
   done  
 
-lemma mapM_wp_foldr':
-  assumes c_wp: "\<And>(f :: 'e \<Rightarrow> ('f, 'a) cont) x P Q. (\<And>x. hoare_triple (lift (P x)) (f x) (Q)) \<Longrightarrow> 
-                                                    hoare_triple (lift (pre (P (g x)) x)) (do { b <- c x; f b}) Q"  
-  shows " (\<And>x. hoare_triple (lift (P x)) (f x) Q) 
-          \<Longrightarrow>   hoare_triple (lift (foldr (\<lambda>x R. pre R x) xs (P (map g xs)) ))
-                (do {vs <- mapM c (xs :: 'd list) ; (f :: 'e list \<Rightarrow> ('f, 'a) cont) (vs )}) Q"
-  apply (induct xs arbitrary: P f; clarsimp)
-  apply (rule hoare_weaken_pre, subst bindCont_assoc[symmetric])
-   apply (rule c_wp)
-   apply (atomize, erule allE)
-  apply (erule allE) back
-  apply (subst bindCont_assoc[symmetric])
-   apply (erule mp)
-   apply (clarsimp)
-   apply (fastforce)
-  apply (fastforce)
-  done
-
-lemma sep_factor_foldI':
-  "(I \<and>* (foldr (\<lambda>x R. (P x \<and>* (Q x \<longrightarrow>* R))) xs (I \<longrightarrow>* R))) s \<Longrightarrow> (foldr (\<lambda>x R. (I \<and>* P x \<and>* (I \<and>* Q x \<longrightarrow>* R))) xs R) s"
-  apply (induct xs arbitrary:s; clarsimp simp:)
-   apply (sep_solve)
-  apply (sep_cancel)+
-  apply (sep_mp)
-  apply (clarsimp simp: sep_conj_ac)
-  done
-
-lemma factor_foldr_conj: "(\<forall>x\<in>(list.set xs). P x) \<and> (foldr f xs R) s \<Longrightarrow> (\<And>a. mono (f a)) \<Longrightarrow>  
-  (foldr (\<lambda>x R s. P x \<and> f x R s) xs R) s"
-  apply (induct xs  arbitrary: s; clarsimp)
-  by (metis (mono_tags, lifting) monoD predicate1D predicate1I)
-
-
-lemma factor_foldr_pure: "(\<forall>x\<in>(list.set xs). P x) \<and> ((\<forall>x\<in>(list.set xs). P x) \<longrightarrow> (foldr f xs R) s) \<Longrightarrow> (\<And>a. mono (f a)) \<Longrightarrow>  
-  (foldr (\<lambda>x R s. (P x \<longrightarrow> f x R s) \<and> P x) xs R) s"
-  apply (induct xs  arbitrary: s; clarsimp)
-  apply (atomize)
-  by (metis (mono_tags, lifting) le_boolD le_funE monoD predicate1I)
-
-lemma factor_foldr_conj': "(\<forall>x\<in>(list.set xs). P x) \<and> (foldr f xs R) s \<Longrightarrow> (\<And>a. mono (f a)) \<Longrightarrow>  
-  (foldr (\<lambda>x R s. f x R s \<and> P x) xs R) s"
-  apply (induct xs  arbitrary: s; clarsimp)
-  by (metis (mono_tags, lifting) monoD predicate1D predicate1I)
-
-
-lemma factor_foldr_sep: "(P \<and>* (foldr f xs (P \<longrightarrow>* R))) s \<Longrightarrow> (\<And>a. mono (f a)) \<Longrightarrow>  (\<And>R a. f a (P \<and>* R) = (P \<and>* f a R)) \<Longrightarrow>   (foldr (\<lambda>x R. P \<and>* (P \<longrightarrow>* f x R)) xs  R) s"
-  apply (induct xs  arbitrary: s; clarsimp)
-   apply (sep_mp, clarsimp)
-  apply (sep_cancel)+
-  apply (erule sep_curry[rotated])
-  apply (clarsimp simp: sep_conj_ac)
-  by (smt (verit, ccfv_threshold) monoE predicate1D predicate1I sep_conj_commute)
-  apply (erule_tac x=h in allE)
-  apply (drule mp)
-   apply (sep_cancel)
-  oops
-
-lemma in_set_pure_simp[simp]:"in_set (\<lambda>_. P) s = P"
-  by (clarsimp simp: in_set_def)
-
-declare range.simps[simp del ]
-
-lemma foldr_const[simp]: "foldr (\<lambda>_ R. R) xs R = R"
-  by (induct xs; clarsimp)
-
-
-lemma mono_id[simp]: "mono (\<lambda>R. R)" 
-   by (rule monoI; clarsimp)
 
 
 lemma new_rewards_and_penalties_context_wp[wp]:"(\<And>x. hoare_triple (lift (P x)) (c x) Q) \<Longrightarrow>
@@ -1500,8 +965,6 @@ lemma new_rewards_and_penalties_context_wp[wp]:"(\<And>x. hoare_triple (lift (P 
   apply (rule factor_foldr_pure)
    apply (clarsimp)
   by (clarsimp)
-
-find_theorems new_effective_balances_ctxt
 
 lemma EBI_multiple_of_HYSTERESIS_QUOTIENT: 
   "\<exists>n. HYSTERESIS_QUOTIENT * n div n = HYSTERESIS_QUOTIENT \<and> EFFECTIVE_BALANCE_INCREMENT config = HYSTERESIS_QUOTIENT * n" sorry
@@ -1589,8 +1052,6 @@ lemma process_single_inactivity_update_wp[wp]: "(\<And>x. hoare_triple (lift (P 
   done
 
 
-lemma hoare_let[intro, wp]: "hoare_triple P (bindCont (b a) c) Q \<Longrightarrow> hoare_triple P (bindCont (Let a b) c) Q"
-  by (clarsimp simp: Let_unfold)
 
 
 definition "rewardable (v_info :: ValidatorInfo) flag_index state_ctxt \<equiv> 
@@ -1599,11 +1060,6 @@ definition "rewardable (v_info :: ValidatorInfo) flag_index state_ctxt \<equiv>
 
 
 
-
-lemma if_lift: "(if B then lift P else lift Q) = lift (if B then P else Q)"
-  by (intro ext; clarsimp simp: lift_def)
-
-thm mul_wp
 
 lemma get_flag_index_delta_TIMELY_SOURCE_WEIGHT_wp[wp]: "(\<And>x. hoare_triple (lift (P x)) (c x) Q) \<Longrightarrow>
    hoare_triple (lift (\<lambda>s. let unslashed_participating_increment = (unslashed_participating_increments_array_f rewards_ctxt ! 0) in
@@ -1732,23 +1188,12 @@ lemma range_participation_flag_weights_simp:"(local.range 0 (length PARTICIPATIO
   apply (clarsimp simp: PARTICIPATION_FLAG_WEIGHTS_def)
   by (clarsimp simp: range.simps)
 
-term case_prod
 
 lemma hoare_case_prod[intro, wp]: "hoare_triple P (bindCont (f (fst x) (snd x)) c) Q \<Longrightarrow> 
   hoare_triple P (bindCont (case_prod f x) c) Q"
   by (clarsimp split: prod.splits)
 
 
-lemma add_wp'[wp]: "(\<And>x. hoare_triple (lift (P x )) (c x) Q) \<Longrightarrow>
-  hoare_triple (lift (\<lambda>s. n \<le> n + m \<and> (n \<le> n + m \<longrightarrow> P (n + m) s))) 
-(do {x <- (word_unsigned_add n  m); c x}) Q"
-  apply (rule hoare_weaken_pre)
-   apply (clarsimp simp:  word_unsigned_add_def )
-   apply (simp only: Let_unfold)
-   apply (wp, clarsimp simp: bindCont_return')
-    apply (fastforce)
-   apply (wp)
-  by (clarsimp)
 
 lemma ISB_not_zero[simp]:  "INACTIVITY_SCORE_BIAS config \<noteq> 0" sorry
 
@@ -1793,17 +1238,6 @@ lemma drop_maps_to_lift: "lift (maps_to l v \<and>* R) s \<Longrightarrow> lift 
   apply (clarsimp simp: point_of_plus_domain_iff)
   by (metis comp_apply point_of_plus_domain_iff sep_add_commute valid_write_write)
 
-find_theorems alloc
-
-lemma "\<lless>\<lambda>s. \<forall>x. P x s\<then> \<ge> (ALLS x. lift (P x))" 
-  apply (clarsimp)
-
-
-  find_theorems lift "\<forall>x. ?P x"
-
-lemma "(\<And>s. lift P s \<Longrightarrow> lift Q s) \<Longrightarrow> lift P \<le> lift Q"
-  by (simp add: le_funI)
-
 lemma case_simplifier_0: "(0 = TIMELY_HEAD_FLAG_INDEX \<longrightarrow> P) = True"
   by (clarsimp simp: TIMELY_HEAD_FLAG_INDEX_def)
 
@@ -1827,8 +1261,6 @@ definition "assuming P R \<equiv> P \<and> (P \<longrightarrow> R)"
 lemma write_beacon_wp': "\<lblot>\<lless>P\<then>\<rblot> c () \<lblot>Q\<rblot> \<Longrightarrow> \<lblot>\<lless>(EXS v. l \<mapsto>\<^sub>l v) \<and>* (l \<mapsto>\<^sub>l v' \<longrightarrow>* P)\<then>\<rblot> bindCont (write_to l v') c \<lblot>Q\<rblot>"
   sorry
 
-lemma maps_exI[sep_cancel]: "(maps_to l v) s \<Longrightarrow> (EXS v. maps_to l v) s"
-  by (blast)
 
 lemma rewardable_is_unslashed[simp]: "rewardable x y z \<Longrightarrow> is_unslashed_participating_index x y"
   by (clarsimp simp: rewardable_def)
@@ -1932,8 +1364,9 @@ lemma process_single_reward_and_penalty_wp[wp]: "
     apply (rule mapM_wp_foldr'[where g="\<lambda>_. ()"])
      apply (simp only: bindCont_assoc[symmetric])
      apply (rule get_flag_index_delta_wp_gen)
-     apply (simp only: bindCont_assoc[symmetric] | rule read_beacon_wp_ex add_wp' write_beacon_wp' wp | fastforce)+
+     apply (simp only: bindCont_assoc[symmetric] | rule read_beacon_wp_ex add_wp' write_beacon_wp' wp | assumption)+
   apply (simp only: if_lift TIMELY_TARGET_FLAG_INDEX_def TIMELY_HEAD_FLAG_INDEX_def TIMELY_SOURCE_FLAG_INDEX_def)
+  apply (simp only: Let_unfold)
   apply (clarsimp)
    apply (unfold range_participation_flag_weights_simp[simplified])
    apply (simp only: foldr.simps case_flag_simplifiers)
@@ -2003,314 +1436,6 @@ lemma process_single_slashing[wp]:
     apply (intro conjI impI allI; clarsimp simp: saturating_sub_def)
   done
 
-find_theorems update_next_epoch_progressive_balances
-
-find_theorems Let hoare_triple
-
-lemma liftM_wp[wp]: "hoare_triple pre (do {x <- c; d (f x)}) post \<Longrightarrow>  hoare_triple pre (do {x <- f <$> c; d x}) post"
-  apply (clarsimp simp: liftM_def comp_def bindCont_assoc)
-  by (smt (verit, best) bindCont_assoc bindCont_return' bindCont_right_eqI)
-
-thm sub_wp[no_vars]
-
-lemma sub_wp'[wp]: "(\<And>x. \<lblot>\<lless>P x\<then>\<rblot> c x \<lblot>Q\<rblot>) \<Longrightarrow> \<lblot>\<lless>\<lambda>s. m \<le> n \<and> (m \<le> n \<longrightarrow> P (n - m) s)\<then>\<rblot> (bindCont (n .- m) c) \<lblot>Q\<rblot>"
-  apply (rule sub_wp, fastforce)
-  done
-
-thm mapM_wp_foldr'[no_vars]
-
-term "foldrM undefined xs undefined P"
-
-term "\<lambda>x P. (A x \<and>* (B x \<longrightarrow>* (P (g x))))"  
-
-lemma mapM_fake: assumes c_wp: "\<And>(f :: 'e \<Rightarrow> ('f, 'a) cont) x P Q. (\<And>x. hoare_triple (lift (P x)) (f x) (Q)) \<Longrightarrow> 
-                                                    hoare_triple (lift ( (pre x) P)) (do { b <- c x; f b}) Q"   
-  shows " (\<And>x. hoare_triple (lift (P x)) (f x) Q) 
-          \<Longrightarrow>   hoare_triple (lift (mapM pre xs P ) )
-                (do {vs <- mapM c (xs :: 'd list) ; (f :: 'e list \<Rightarrow> ('f, 'a) cont) (vs )}) Q"
-  apply (induct xs arbitrary: P f; clarsimp)
- apply (clarsimp simp: return_def)
-  apply (rule hoare_weaken_pre, subst bindCont_assoc[symmetric])
-apply (rule c_wp)
-   apply (atomize, erule allE)
-  apply (erule allE) back
-  apply (subst bindCont_assoc[symmetric])
-   apply (erule mp)
-   apply (clarsimp)
-   apply (fastforce)
-  apply (clarsimp simp: foldrM_cons)
-  apply (clarsimp simp: bindCont_def return_def)
-  done
-
-lemma mapM_wp_foldr'': 
-
-
-  assumes c_wp: "\<And>f x P Q bs. (\<And>x. hoare_triple (lift (P x)) (f x) (Q)) \<Longrightarrow> 
-                                                    hoare_triple (lift (pre P (g :: 'd \<Rightarrow> 'e) (x :: 'd) bs)) (do { b <- c x; f (b#bs)}) Q"  
-  shows " (\<And>x. hoare_triple (lift (P x)) (f x) Q) 
-          \<Longrightarrow>   hoare_triple (lift ((foldr (\<lambda>x R. pre R g x) (xs :: 'd list) P) (map g xs)) )
-                (do {vs <- mapM c (xs :: 'd list) ; (f :: 'e list \<Rightarrow> ('f, 'a) cont) (vs )}) Q"
-  apply (induct xs arbitrary: P f; clarsimp)
-  apply (rule hoare_weaken_pre, subst bindCont_assoc[symmetric])
-  oops
-   apply (rule c_wp)
-   apply (atomize, erule allE)
-  apply (erule allE) back
-  apply (subst bindCont_assoc[symmetric])
-   apply (erule mp)
-   apply (clarsimp)
-   apply (fastforce)
-  oops
-  apply (fastforce)
-  done
-
-
-find_theorems foldr sep_conj
-
-lemma mapM_factor_const: assumes mono_f:  "(\<And>a. mono (f a))" shows
- "(P \<and>*  mapM f xs (\<lambda>v. P \<longrightarrow>* R v)) s \<Longrightarrow> (\<And>R a. f a (\<lambda>v. P \<and>* R v) \<ge> (P \<and>* f a R)) \<Longrightarrow> mapM (\<lambda>x R s. (P \<and>*  (P  \<longrightarrow>* f x R)) s )
-           xs R s"
-  apply (induct xs arbitrary: R  s; clarsimp?)
-  apply (clarsimp simp: return_def)
-   apply (sep_mp, clarsimp)
-  apply (clarsimp simp: bindCont_def return_def)
-  apply (sep_cancel)+
-  apply (erule sep_curry[rotated])
-  apply (sep_select_asm 2)
-  apply (atomize)
-  apply (clarsimp)
-
-  apply (erule_tac x="(\<lambda>a. mapM f xs (\<lambda>aa. P \<longrightarrow>* R (a # aa)))" in allE)
-  apply (erule_tac x=a in allE)
-
-  apply (drule_tac x=h in le_funD, clarsimp)
-  apply (insert mono_f)
-  apply (atomize)
-  apply (erule_tac x=a in allE)
-  apply (clarsimp simp: mono_def)
-  apply (erule_tac x="(\<lambda>v. P \<and>* mapM f xs (\<lambda>aa. P \<longrightarrow>* R (v # aa)))" in allE)
-
-  apply (erule_tac x="(\<lambda>a. mapM (\<lambda>x R. P \<and>* (P \<longrightarrow>* f x R)) xs (\<lambda>aa. R (a # aa)))" in allE)
-  apply (drule mp)
-   apply (clarsimp)
-  apply (drule_tac x=h in le_funD, clarsimp)
-  done
-
-
-lemma mapM_factor_ex: assumes mono_f: 
-"(\<And>a b x y s. a \<le> b \<Longrightarrow> f x a y s \<Longrightarrow> f x b y s)" shows "\<exists>y. mapM (\<lambda>x R. f x R y) xs R s \<Longrightarrow>  mapM (\<lambda>x R. EXS y. f x R y) xs R s"
-  apply (induct xs arbitrary: R s; clarsimp?)
-  apply (clarsimp simp: bindCont_def return_def)
-  apply (rule_tac x=y in exI)
-  apply (erule mono_f[rotated])
-  apply (clarsimp)
-  apply (blast)
-  done
-  
-  apply (rule_tac x=a in exI)
-  apply (rule_tac x=x in exI, sep_cancel)+
-  apply (erule sep_curry[rotated])
-  apply (sep_select_asm 2)
-  apply (atomize)
-  apply (erule_tac x="\<lambda>aa. R (a # aa)" in allE) 
-  apply (erule_tac x="h" in allE) 
-  apply (drule mp)
-   apply (rule_tac x=x in exI)
-  apply (sep_cancel)
-  apply (sep_solve)
-  done
-
-lemma mapM_rewriteI: "mapM g xs R s \<Longrightarrow> (\<And>a b c. b \<ge> c  \<Longrightarrow> f a b \<ge> g a c) \<Longrightarrow>  mapM f xs R s"
-  apply (induct xs arbitrary: R s; clarsimp?)
-  apply (clarsimp simp: bindCont_def)
-  apply (atomize)
-  apply (erule_tac x=a in allE)
-  apply (clarsimp simp: return_def)
-  apply (drule_tac x="(\<lambda>a. mapM f xs (\<lambda>aa. return (a # aa) R))" in spec)
-  apply (drule_tac x="(\<lambda>a. mapM g xs (\<lambda>aa. return (a # aa) R))" in spec)
-  apply (drule mp)
-   apply (clarsimp)
-  by (drule_tac x=s in le_funD, clarsimp simp: return_def)
-
-lemma mapM_lift_assms: assumes mono_f: "(\<And>a. mono (f a))" and mono_g: "(\<And>a. mono (g a))" shows "(\<forall>x\<in>(list.set xs). (B x \<longrightarrow> P x)) \<and> ((\<forall>x\<in>(list.set xs). (B x \<longrightarrow> P x)) \<longrightarrow> mapM (\<lambda>x R s. if B x then f x R s else g x R s) xs R s) \<Longrightarrow>
-  mapM (\<lambda>x R s. if B x then (P x \<and> (P x \<longrightarrow> f x R s)) else g x R s) xs R s"
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  using mono_f 
-   apply (smt (verit, ccfv_threshold) monotoneD predicate2I rev_predicate1D)
-  using mono_g
-  by (smt (verit, ccfv_threshold) monotoneD predicate2I rev_predicate1D)
-
-lemma mapM_lift_if: "R (map (\<lambda>x. if B x then f x else g x) xs) s  \<Longrightarrow> mapM (\<lambda>x R s. if B x then R (f x) s else R (g x)s) xs R s"
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  done
-
-lemma mapM_lift_if: "R (map g xs) s  \<Longrightarrow> mapM f xs R s"
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  done
-
-lemma mapM_lift_imp: "(\<forall>x\<in>list.set xs. (B x \<longrightarrow> P x)) \<longrightarrow> R (map (\<lambda>x. if B x then f x else g x) xs) s  \<Longrightarrow> mapM (\<lambda>x R s. if B x then P x \<longrightarrow> R (f x) s else R (g x)s) xs R s"
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  done
-
-lemma mapM_lift_imp: " mapM f xs R s \<and> mapM g xs R s \<Longrightarrow> mapM (\<lambda>x R s. (f R x s) \<and> g R x s) xs R s"
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  done
-
-lemma "(if P then A \<and> B else R) = ((if P then A else R) \<and> (if P then B else R))"
-  apply (safe; clarsimp)
-  
-
-lemma mapM_lift_over_if: "mapM (\<lambda>x R . P (if B x then (f R x ) else (g R x))) xs R s \<Longrightarrow> mono P \<Longrightarrow> mono f \<Longrightarrow> mono g \<Longrightarrow> mapM (\<lambda>x R s. if B x then P (f R x) s else P (g R x) s) xs R s"
-  apply (clarsimp)
-  apply (erule mapM_rewriteI)
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  sorry
-
-lemma factor_conj: "(\<lambda>x R s. (if C x s then (\<lambda>s. P x s \<and> A x R s) else (\<lambda>s. B x R s)) s) = (\<lambda>x R s. (C x s \<longrightarrow> P x s) \<and> (if C x s then A x R s else B x R s))" 
-  apply (intro ext conjI impI iffI; clarsimp?)
-  by (clarsimp split: if_splits)
-
-
-lemma factor_imp: "(\<lambda>x R s. (if C x s then (\<lambda>s. P x s \<and> (P x s \<longrightarrow> A x R s)) else (\<lambda>s. B x R s)) s) = (\<lambda>x R s. (C x s \<longrightarrow> P x s) \<and> ((C x s \<longrightarrow> P x s) \<longrightarrow> (if (C x s) then A x R s else B x R s)))" 
-  by (intro ext conjI impI iffI; clarsimp split: if_splits)
-   apply (case_tac "C x s \<and> (C x s \<longrightarrow> P x s)", simp)
-   apply (simp)
-
-   apply (clarsimp split: if_splits)
-  apply (clarsimp split: if_splits)
-
-  apply (clarsimp)
-
-lemma lift_conj_mapM: "((\<forall>x\<in>(list.set xs). A x) \<and> (mapM f xs R s)) \<Longrightarrow> (\<And>a. mono (f a)) \<Longrightarrow> mapM (\<lambda>x R s. (A x ) \<and> (f x R s)) xs R s "
-  apply (induct xs arbitrary: s R; clarsimp)
-  apply (clarsimp simp: bindCont_def return_def)
-  apply (atomize)
-  apply (erule_tac x=a in allE)
-  apply (drule_tac x= "(\<lambda>a. mapM f xs (\<lambda>aa. R (a # aa)))" and y="(\<lambda>a. mapM (\<lambda>x R s. A x  \<and> f x R s) xs (\<lambda>aa. R (a # aa)))" in  monoD)
-  apply (clarsimp)
-  by blast
-
-lemma lift_assumes_mapM: "((\<forall>x\<in>(list.set xs). A x) \<and> ((\<forall>x\<in>(list.set xs). A x) \<longrightarrow> (mapM f xs R s))) \<Longrightarrow> (\<And>a. mono (f a)) \<Longrightarrow> mapM (\<lambda>x R s. A x \<and> ((A x ) \<longrightarrow> (f x R s))) xs R s "
-  apply (induct xs arbitrary: s R; clarsimp)
-  apply (clarsimp simp: bindCont_def return_def)
-  apply (atomize)
-  apply (erule_tac x=a in allE)
-  apply (drule_tac x= "(\<lambda>a. mapM f xs (\<lambda>aa. R (a # aa)))" and y="(\<lambda>a. mapM (\<lambda>x R s. A x \<and> (A x \<longrightarrow> f x R s)) xs (\<lambda>aa. R (a # aa)))" in  monoD)
-   apply (clarsimp)
-  by blast
-  
-
-lemma mapM_lift_over_if: "mapM (\<lambda>x R . (if B x then (\<lambda>s. P x R \<and> f R x s ) else (g R x))) xs R s \<Longrightarrow> mono P \<Longrightarrow> mono f \<Longrightarrow> mono g \<Longrightarrow> mapM (\<lambda>x R s. if B x then (f R x) s else (g R x) s) xs R s"
-  apply (clarsimp)
-  apply (erule mapM_rewriteI)
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  sorry
-
-lemma mapM_lift_over_if: "mapM (\<lambda>x R . P (if B x then (f R x ) else (g R x))) xs R s \<Longrightarrow> mono P \<Longrightarrow> mono f \<Longrightarrow> mono g \<Longrightarrow> mapM (\<lambda>x R s. if B x then P (f R x) s else P (g R x) s) xs R s"
-  apply (clarsimp)
-  apply (erule mapM_rewriteI)
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  sorry
-
-lemma mapM_lift_over_if': "mapM (\<lambda>x R s. P (if B x then (f R x s) else (g R x s))) xs R s \<Longrightarrow> mono P \<Longrightarrow> mono f \<Longrightarrow> mono g \<Longrightarrow> mapM (\<lambda>x R s.  (B x \<longrightarrow> P (f R x s)) \<and> (\<not> B x \<longrightarrow> P (g R x s))) xs R s"
-  apply (clarsimp)
-  apply (erule mapM_rewriteI)
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  sorry
-
-
-named_theorems mono_thms
-
-lemma mono_if[mono_thms]:"mono f \<Longrightarrow> mono g \<Longrightarrow> mono (\<lambda>x. if B then f x else g x)"
-  by (clarsimp simp: mono_def)
-
-
-lemma mono_if_cont[mono_thms]:" mono (\<lambda>R x. if B x then R (f x) x else R (g x) x)"
-  apply (clarsimp simp: mono_def)
-  apply (intro le_funI; clarsimp split: if_splits)
-  apply (intro conjI impI)
-   apply (simp add: le_funD)
-  apply (simp add: le_funD)
-  done
-
-lemma mono_sep_conj[mono_thms]: "mono f \<Longrightarrow> mono (\<lambda>R. (P \<and>* f R))"
-  apply (clarsimp simp: mono_def)
-  apply (sep_cancel)
-  by blast
-
-lemma mono_sep_impl[mono_thms]: "mono f \<Longrightarrow> mono (\<lambda>R. (P \<longrightarrow>* f R))"
-  apply (clarsimp simp: mono_def)
-  apply (sep_cancel)
-  apply (sep_mp)
-  by blast
-
-lemma mono_app: "mono g \<Longrightarrow> mono (\<lambda>f x. g (f x))"
-  apply (clarsimp simp: mono_def)
-  apply (rule le_funI)
-  apply (erule allE, erule allE, erule mp)
-  apply (drule le_funD, blast)
-  done
-
-lemma mono_app': "mono g \<Longrightarrow> mono (\<lambda>f x. g (f x) x)"
-  apply (clarsimp simp: mono_def)
-  apply (rule le_funI)
-  apply (erule_tac x="(x xa)" in allE, erule_tac x="(y xa)" in allE)
-  apply (drule mp)
-   apply (drule le_funD, blast)
-  apply (drule le_funD, blast)
-  done
-
-lemma mono_conj[mono_thms]:"mono f \<Longrightarrow> mono g \<Longrightarrow> mono (\<lambda>x. f x \<and> g x)"
-  by (clarsimp simp: mono_def)
-
-
-lemma mono_conj'[mono_thms]:"mono f \<Longrightarrow> mono g \<Longrightarrow> mono (\<lambda>x a. f x a \<and> g x a)"
-  apply (clarsimp simp: mono_def)
-  by blast
-
-lemma mono_imp[mono_thms]: "mono g \<Longrightarrow> antimono f \<Longrightarrow> mono (\<lambda>x a. f x a \<longrightarrow> g x a)" 
-  apply (clarsimp simp: mono_def antimono_def)
-  apply (blast)
-  done
-
-
-lemma mono_const[mono_thms]: "mono (\<lambda>x. y)"
-  by (clarsimp simp: mono_def)
-
-
-lemma antimono_const[mono_thms]: "antimono (\<lambda>x. y)"
-  by (clarsimp simp: antimono_def)
-
-lemma mono_apply[mono_thms]: "mono (\<lambda>x. x v)"
-  apply (clarsimp simp: mono_def)
-  apply (drule le_funD)
-  by blast
-
-declare mono_id[mono_thms]
-
-
-
-lemma " (I \<and>* mapM (\<lambda>x R s. (P x \<and>* (Q x \<longrightarrow>* R)) s) xs (\<lambda>x s. (I \<longrightarrow>* R x))) s \<Longrightarrow> mapM (\<lambda>x R. I \<and>* P x \<and>* (I \<and>* Q x \<longrightarrow>* R)) xs R s"
-
-  term Lens
 
 definition "(total_active_balance :: (ProgressiveBalancesCache, u64) lens) = Lens total_active_balance_f (\<lambda>x v. x\<lparr>total_active_balance_f := v\<rparr>) (\<lambda>_. True)"
 
@@ -2340,8 +1465,6 @@ lemma state_splitI: "(\<Squnion>x. \<tau> {x} ; a) \<le> b \<Longrightarrow> a \
 
 lemma get_dom_inter: "get l x = Some y \<Longrightarrow> dom (get l) \<inter> {x} = {x}"
   by (safe; clarsimp?)
-
-lemma "Collect (\<lambda>x. get l x \<noteq> None) = dom (get l)"
 
 lemma compile_if: "(\<Squnion>x\<in>A. \<tau> {x} ;
           (if P A x then f a x else g a x) (c x A)) = (\<Squnion>x\<in>(Collect (P A)) \<inter> A. \<tau> {x}; f a x (c x A)) \<squnion> (\<Squnion>x\<in>(-Collect (P A)) \<inter> A. \<tau> {x} ; g a x (c x A))" sorry
@@ -2402,9 +1525,6 @@ thm sup.commute
 lemma "\<tau> {x} ; (\<Squnion>y. \<tau> {y} ; f x y) = (\<tau> {x} ; f x x)"
   by (simp add: test_restricts_Nondet)
 
-find_theorems name:test name:pgm
-
-lemma "\<tau> {x} ; \<pi> (UNIV \<times> B) = \<pi> ({x} \<times> B)"
 
 lemma restrict_univ_singleton: "{x} \<triangleleft> (UNIV \<times> A) = ({x} \<times> A)"
   by (safe; clarsimp simp: restrict_domain_def)
@@ -2420,8 +1540,6 @@ lemma inter_collect_r: "A \<inter> Collect B = Collect (\<lambda>x. x \<in> A \<
 lemma neg_collect: "- Collect P = Collect (- P)"
   by (safe; clarsimp?)
 
-term foldrM
-
 
 lemma foldr_eq: " foldr (\<lambda>a b c d. a c (\<lambda>a. b a d)) (map (\<lambda>x xs c. f x (\<lambda>a. c (xs @ [a]))) xs) (\<lambda>a b. b a) ys (\<lambda>a. x (aa # a)) =
                         foldr (\<lambda>a b c d. a c (\<lambda>a. b a d)) (map (\<lambda>x xs c. f x (\<lambda>a. c (xs @ [a]))) xs) (\<lambda>a b. b a) (aa#ys) x" 
@@ -2434,26 +1552,12 @@ lemma foldr_eq: " foldr (\<lambda>a b c d. a c (\<lambda>a. b a d)) (map (\<lamb
   
   sorry
 
-term "foldl"
 
 definition "foldlM f xs = foldr k_comp (map f xs) return "
 
-lemma "foldr (\<lambda>x xs. x # xs) xs ys = xs@ys" 
-  apply (subgoal_tac "xs = [a, b, c]", clarsimp)
-  apply (induct xs arbitrary: ys; clarsimp?)
-  
-  apply (subst foldl_Cons)
-
-
-  term "foldlM (\<lambda>f xs. bindCont f (\<lambda>x. return (x # xs)))"
-
-  term foldrM
 
 definition foldrM' 
   where "foldrM' f z xs = foldl (\<lambda>f g. k_comp f g) (return) (map f xs)  z  "
-
-find_theorems "map ?f (_ # _)"
-
 
 
 primrec sequence :: "(('e, 'r) cont) list \<Rightarrow> ('e list, 'r) cont" where
@@ -2467,10 +1571,6 @@ lemma mapM_is_foldr_map: "mapM f xs = foldr (\<lambda>x xs. do {y <- x; ys <- xs
 
 lemma mapM_is_sequence_map: "mapM f xs = sequence (map f xs) "
   by (induct xs; clarsimp simp: bindCont_def return_def foldrM_def k_comp_def return_def)
-
-(* primrec mapM :: "('a \<Rightarrow> ('b, 'r) cont) \<Rightarrow> 'a list \<Rightarrow> ('b list, 'r) cont" where
-  "mapM f (x#xs) = do { b <- mapM f xs ; a <- f x; return (a # b)} " |
-  "mapM f [] = return []" *)
 
 lemma mono_sequence: "\<forall>f\<in>(list.set xs). mono f \<Longrightarrow> mono (sequence xs)"
   apply (induct xs; clarsimp intro!: monoI simp: return_def bindCont_def)
@@ -2488,106 +1588,6 @@ lemma mono_mapM: "(\<And>a. mono (f a)) \<Longrightarrow> mono (mapM f xs)"
   apply (clarsimp)
   done
 
-text \<open>
-lemma mapM_ref_induct: " (\<And>a. (\<lambda>aa. f a (\<lambda>a. c (a # aa))) \<le> c) \<Longrightarrow> mapM f xs c \<le> (d :: 'a)" sorry
-  apply (induct xs ; clarsimp?)
-   apply (clarsimp simp: bindCont_def return_def)
-   defer
-   apply (clarsimp simp: bindCont_def return_def)
-   apply (erule order_trans[rotated])
-   apply (rule monoD[OF mono_mapM])
-  defer
-   apply (drule_tac x=a in meta_spec)
-   apply (drule_tac x="(\<lambda>a. mapM f xs (\<lambda>aa. c (a # aa)))" and y="\<lambda>a. d" in monoD)
-    apply (clarsimp)
-   apply (rule le_funI)
-   apply (drule_tac x="\<lambda>b. c (x # b)" in meta_spec) 
-  apply (atomize)
-   apply (drule mp)
-  apply (clarsimp)
-  oops
-    apply (blast)
-  apply (erule order_trans)
-  term "lfp (f a)"
-
-  apply (drule monoD[where x=a and y=a for a])
-   apply (rule_tac x=a in order_refl)
-  apply (rule order_trans)
-  apply (drule le_funD)
-
-
-lemma "(\<Squnion>x\<in>S. \<tau> {x} ; \<top>) = run (assertion (\<lambda>s. s \<in> S))"
-  apply (clarsimp simp: assertion_def getState_def run_def bindCont_def return_def)
-  apply (subst compile_if; clarsimp simp: fail_def return_def)
-
-lemma top_is_run_fail: "\<top> = run (fail)"
-  by (clarsimp simp: run_def fail_def)
-
-lemma mapM_sup: "mapM f xs (\<lambda>a. c a \<squnion> d a) = mapM f xs c \<squnion> mapM f xs d"
-  apply (induct xs; clarsimp?)
-   apply (clarsimp simp: return_def)
-  sorry
-
-
-lemma run_hoareI: "hoare_triple (\<lambda>s. s \<in> P) f (\<lambda>s. s \<in> Q) \<Longrightarrow> run f \<le> assert P ; spec (UNIV \<times> Q)"
-  apply (subst (asm) hoare_triple_def)
-  apply (clarsimp simp: restrict_range_def)
-  apply (erule order_trans)
-  apply (rule seq_mono_right)
-  by (metis dual_order.refl inf_top_left restrict_range_UNIV restrict_range_def)
-
-lemma branch_merge: "(\<Squnion>x\<in>S. \<tau> {x} ; f x) \<squnion> (\<Squnion>x\<in>S'. \<tau> {x} ; g x) = (\<Squnion>x\<in>(S \<union> S'). (\<tau> S ; f x) \<squnion> (\<tau> (S') ; g x))" sorry
-
-lemma branch_merge': "(\<Squnion>x\<in>S. \<tau> {x} ; f x) \<squnion> (\<Squnion>x\<in>S'.  g x) = (\<Squnion>x\<in>(S \<union> S'). (\<tau> S ; f x) \<squnion> (\<tau> (-S') ; g x))" sorry
-
-lemma mapM_ref: "(\<And>x. x \<in> list.set xs \<Longrightarrow> f x \<le> g x) \<Longrightarrow> mapM f xs d \<le> mapM g xs d"
-  sorry
-   
-
-lemma mapM_sup_distrib: 
-    "mapM (\<lambda>i c. \<Squnion>x\<in>(S i). f x i c) xs (d :: 'e list \<Rightarrow> 'a) \<le> (\<Squnion>g\<in>{g. (\<forall>x\<in>(list.set xs). g x \<in> S x)}. mapM (\<lambda>i c. f (g i) i c) xs d)"
-  apply (rule antisym; clarsimp?)
-  defer
-   apply (clarsimp simp: bindCont_def Sup_le_iff)
-   apply (rule mapM_ref)
-   apply (rule le_funI; clarsimp?)
-  sorry
-  find_theorems "mapM _ _ _ \<le> mapM _ _ _"
-   apply (induct xs arbitrary: d ; clarsimp?)
-  apply (clarsimp simp: bindCont_def Sup_le_iff)
-  apply (rule_tac x="(S"
-
-  find_theorems "\<tau> _ \<sqinter> \<tau> _"
-
-lemma not_collect_inter: "-(Collect P) \<inter> -(Collect Q) = -(Collect (P \<squnion> Q))"
-  apply (safe; clarsimp?)
-  done
-
-lemma "test.negate (\<tau> t) = \<tau> (-t)"
-
-  find_theorems test.negate
-  sledgehammer
-  by fastforce
-
-lemma "mapM (\<lambda>i c. (\<tau> (t i) ; \<top>) \<squnion> f i c) xs r = assert (\<Sqinter>i\<in>(list.set xs). - t i) ; (mapM f xs r)"
-  apply (subgoal_tac "xs = [a, b, c]", clarsimp simp: bindCont_def return_def)
-   apply (clarsimp simp: assert_def)
-   apply (clarsimp simp: assert_def nondet_seq_distrib)
-  apply (subst seq_assoc)+
-   apply (clarsimp simp: seq_abort)
-  apply (induct xs arbitrary: r; clarsimp)
-   apply (clarsimp simp: assert_def)
-   defer
-   apply (clarsimp simp: bindCont_def return_def)
-   apply (clarsimp simp: assert_def nondet_seq_distrib)
-  find_theorems "\<top> ; _ = \<top>"
-  apply (subst seq_assoc)+
-   apply (clarsimp simp: seq_abort)
-   apply (subst inf.test_sync_to_inf)+
-  apply (simp only: test.hom_not) 
-\<close>
-
-find_theorems Ball Ex
 
 
 lemma seq_map_exsI: "(\<And>a b. mono (f a b)) \<Longrightarrow> (EXS g. sequence (map (\<lambda>x. f (g x) x) xs) R) s \<Longrightarrow> (sequence (map (\<lambda>c s r. \<exists>x. f x c s r) xs) R) s "
@@ -2607,7 +1607,8 @@ lemma seq_map_exsI: "(\<And>a b. mono (f a b)) \<Longrightarrow> (EXS g. sequenc
 lemma seq_map_factor: "sequence (map (\<lambda>x R s.  (B x \<longrightarrow> P (f R x s)) \<and> (\<not> B x \<longrightarrow> P (g R x s))) xs) R = sequence (map (\<lambda>x R s. P (if B x then (f R x s) else (g R x s))) xs) R "
   by (clarsimp)
 
-lemma seq_map_factor': "sequence (map (\<lambda>x R s. if B x then P (f R x) s else P (g R x) s) xs) R = sequence (map (\<lambda>x R . P (if B x then (f R x ) else (g R x))) xs) R "
+lemma seq_map_factor': "sequence (map (\<lambda>x R s. if B x then P (f R x) s else P (g R x) s) xs) R = 
+                        sequence (map (\<lambda>x R . P (if B x then (f R x ) else (g R x))) xs) R "
   apply (subst map_cong[where g="(\<lambda>x R. P (if B x then f R x else g R x)) "])
     apply (rule refl)
   apply (intro ext)
@@ -2632,12 +1633,6 @@ lemma commute_sequence: "(\<And>a. a \<in> list.set xs \<Longrightarrow> \<foral
   apply (erule_tac x=a in allE)
   apply (clarsimp)
   done
-
-lemma commute_sequence: "(\<And>a. a \<in> list.set xs \<Longrightarrow> \<forall>v. f (a v) = a (\<lambda>a. f (v a))) \<Longrightarrow>  sequence xs (\<lambda>xs. f (g xs)) = f (\<lambda>a. sequence xs (\<lambda>v. g a v))"
-  apply (induct xs arbitrary: g)
-   apply (clarsimp simp: return_def bindCont_def)
-  by (clarsimp simp: return_def bindCont_def)
-
 
 lemma mapM_split:  "(\<And>x a R. x \<in> list.set xs \<Longrightarrow> f a (\<lambda>y. P x \<and>* (P x \<longrightarrow>* R y x)) = (P x \<and>* (P x \<longrightarrow>* f a (\<lambda>y. R y x)))) \<Longrightarrow>
   sequence (map (\<lambda>x R. P x \<and>* (P x \<longrightarrow>* f x R)) xs) R = (sequence (map (\<lambda>x R. (P x \<and>* (P x \<longrightarrow>* R x))) xs)  (\<lambda>xs. sequence (map f xs) R)) "
@@ -2664,7 +1659,6 @@ lemma mapM_split_gen:  "(\<And>x a R. x \<in> list.set xs \<Longrightarrow> f a 
    apply (clarsimp)
   by (clarsimp)
 
-thm list.induct
 
 lemma strange: "\<forall>y\<in>{x}. P (f y) \<Longrightarrow> P (f x)"
   apply (blast)
@@ -2765,22 +1759,6 @@ lemma assumes R_split: "(\<And>x xs s. R (x#xs) s \<Longrightarrow> (R [x] \<and
   apply (simp add:  factor_R' seq_simp)
   apply (sep_cancel)
   by presburger
-  oops
-  apply (induct xs arbitrary: s)
-   apply (clarsimp simp: return_def)
-  apply (clarsimp simp: bindCont_def return_def)
-  apply (intro impI conjI)
-   apply (sep_cancel)+
-   apply (erule sep_curry[rotated]) back
-   apply (sep_select_asm)
-   apply (sep_drule R_split)
-   apply (clarsimp)
-   apply (sep_select_asm 2)
-   apply (sep_select_asm 2 1 3)
-   apply (drule sep_conj_impl, assumption) back
-  apply (drule meta_spec)
-  apply (erule meta_mp, assumption)
-
 
 lemma sequence_mono: "sequence (map g xs) R s \<Longrightarrow> (\<And>x R s. x \<in> list.set xs \<Longrightarrow> g x R s \<Longrightarrow> f x R s) \<Longrightarrow> (\<And>a. mono (g a)) \<Longrightarrow>  sequence (map f xs) R s"
   apply (induct xs arbitrary: s R; clarsimp simp: return_def bindCont_def)
@@ -2801,10 +1779,7 @@ lemma sequenceI_rewriting: assumes rewrite_loop: "(\<And>x R s. x \<in> list.set
 lemma foldr_pure:  "(foldr sep_conj (map (\<lambda>x s. sep_empty s \<and> f x) xs) sep_empty \<and>* R) = (\<lambda>s. (\<forall>x\<in>(list.set xs). f x) \<and> R s)"
   by (induct xs arbitrary: ; clarsimp)
 
-
 declare mapM_fake[wp]
-
-find_theorems name:induct "(_ :: nat)"
 
 lemma set_of_range_simp[simp]: "list.set (local.range m n (Suc 0)) = {i. i \<ge> m \<and> i < n}"
   apply (induct \<open>n - m\<close> arbitrary: m n; clarsimp? )
@@ -2941,12 +1916,6 @@ lemma x_mod_y_le_x[simp]:
   "x mod y \<le> (x :: u64)"
   by (metis (no_types, lifting) linorder_le_cases mod_by_0 mod_word_less order_le_less_trans word_gt_0 word_mod_less_divisor)
 
-
-
-lemma "epoch_to_u64 (Epoch x) = x"
-  by (clarsimp)
-
-
 lemma compute_activation_exit_epoch[wp]:
 "(\<And>x. hoare_triple (lift (P x)) (next x) Q) \<Longrightarrow> hoare_triple (\<lless>\<lambda>s.  epoch_to_u64 epoch \<le> epoch_to_u64 epoch + 1 \<and> (epoch_to_u64 epoch + 1) \<le> (epoch_to_u64 epoch + 1) + epoch_to_u64 MAX_SEED_LOOKAHEAD \<and>
              (epoch_to_u64 epoch \<le> epoch_to_u64 epoch + 1 \<longrightarrow>
@@ -2979,8 +1948,6 @@ lemma record_validator_exit_wp[wp]:"(\<And>x. hoare_triple (lift (P x)) (next x)
   done
 
 
-
-term "(x :: Epoch) + y"
 definition "new_exit_epoch ec state_ctxt \<equiv>
          let next_epoch = (current_epoch_f state_ctxt) + 1 in
          let exit_queue_epoch = max (get_max_exit_epoch ec) (next_epoch + MAX_SEED_LOOKAHEAD) in
@@ -2989,14 +1956,6 @@ definition "new_exit_epoch ec state_ctxt \<equiv>
 
 lemma epoch_simp[simp]: "Epoch (epoch_to_u64 e) = e"
   by (case_tac e; clarsimp?)
-
-lemma " Epoch (epoch_to_u64 (max (get_max_exit_epoch ec) (Epoch (epoch_to_u64 (current_epoch_f state_ctxt) + 1 + epoch_to_u64 MAX_SEED_LOOKAHEAD))) + 1) = new_exit_epoch ec state_ctxt"
-  apply (clarsimp simp:  new_exit_epoch_def)
-  by (simp add: one_Epoch_def plus_Epoch_def)
-  apply (subst epoch_simp[where e="(max (get_max_exit_epoch ec) (Epoch (epoch_to_u64 (current_epoch_f state_ctxt) + 1 + epoch_to_u64 MAX_SEED_LOOKAHEAD)))"])
-  apply (intro conjI impI; clarsimp?)
-  
-  oops
 
 lemma initiate_validator_exit_fast_wp[wp]:
   defines precon: "pre state_ctxt x \<equiv> epoch_to_u64 (current_epoch_f state_ctxt) \<le> epoch_to_u64 (current_epoch_f state_ctxt) + 1 \<and>
@@ -3064,7 +2023,6 @@ lemma initiate_validator_exit_fast_wp[wp]:
   defer
   sorry
 
-find_consts "'c p_set"
 
 lemma "valid_lens ref \<Longrightarrow> valid_lens l \<Longrightarrow>set (lens_ocomp l ref) s (get (lens_ocomp l ref) s) = s"
   apply (clarsimp simp: lens_ocomp_def)
@@ -3206,8 +2164,6 @@ lemma sep_expand_allS: "((ALLS x. P x) \<and>* Q) s \<Longrightarrow> (ALLS x. (
 
 abbreviation "maybe m d \<equiv> (case_option d id m)"
 
-term "(maybe (exit_epoch_counts_f ec (new_exit_epoch ec state_ctxt)) 0)"
-
 lemma get_exit_epoch_simp: "get exit_epoch val = exit_epoch_f val"
   by (clarsimp simp: exit_epoch_def)
 
@@ -3219,7 +2175,9 @@ lemma get_withdrawable_epoch_simp: "get withdrawable_epoch val = withdrawable_ep
 
 lemma get_activation_epoch_simp: "get activation_epoch val = activation_epoch_f val"
   by (clarsimp simp:activation_epoch_def)
-term current_epoch
+
+lemmas get_val_fields_simps = get_exit_epoch_simp get_activation_epoch_simp get_withdrawable_epoch_simp
+
 
 abbreviation (input) "queued val_info aq \<equiv> index_f val_info \<in> List.set aq"
 abbreviation (input) "ready_to_eject validator state_ctxt \<equiv> 
@@ -3229,6 +2187,8 @@ lemma lift_exE: "lift (EXS x. P x) s \<Longrightarrow> \<exists>x. (lift (P x)) 
   apply (clarsimp simp: lift_def)
   apply (blast)
   done
+
+
 
 lemma process_single_registry_update_wp[wp]:
 "(\<And>x. hoare_triple (lift (P x)) (next x) Q) \<Longrightarrow> 
@@ -3246,20 +2206,16 @@ lemma process_single_registry_update_wp[wp]:
              (if ready_to_eject val' state_ctxt then record_exit ec (new_exit_epoch ec state_ctxt) (maybe (exit_epoch_counts_f ec (new_exit_epoch ec state_ctxt)) 0) else ec) \<longrightarrow>* P ()))s))) 
      (bindCont (process_single_registry_update vref val_info ex_cache aq 
                                          next_epoch_aq state_ctxt) next) Q"
-  find_theorems hoare_triple eq
   apply (rule hoare_assert_stateI)
-  apply (clarsimp)
+  apply (simp only: lift_pure_conj)
+  apply (elim conjE)
   apply (drule lift_exE, clarsimp)+
 
   apply (unfold process_single_registry_update_def epoch_unsigned_add_def,  rule hoare_weaken_pre, 
     (simp only: bindCont_assoc[symmetric] epoch_unsigned_add_def | rule read_beacon_wp_ex add_wp' write_beacon_wp' wp | fastforce)+)
   apply ( intro le_funI)
   apply (clarsimp)
-  sorry
   apply (rule_tac x=val in exI)
-  apply (rule_tac x=ec in exI)
-  apply (rule_tac x=x in exI)
-
 
    apply (intro conjI impI; clarsimp?)
     apply (sep_cancel)+
@@ -3287,7 +2243,6 @@ lemma process_single_registry_update_wp[wp]:
           apply (clarsimp simp: plus_Epoch_def one_Epoch_def)
 
        apply (sep_mp, clarsimp?)
-  sorry
                apply (sep_cancel)+
           apply (clarsimp simp: Let_unfold plus_Epoch_def one_Epoch_def)
 
@@ -3295,25 +2250,50 @@ lemma process_single_registry_update_wp[wp]:
             apply (rule exI, sep_cancel+)
          apply (rule exI, sep_cancel+)
 
-          apply (sep_drule spec[where x="get exit_epoch val"])
-          apply (sep_drule spec[where x="get withdrawable_epoch val"])
+          apply (sep_drule spec[where x="get exit_epoch val" for val])
+          apply (sep_drule spec[where x="get withdrawable_epoch val" for val])
           apply (sep_drule spec[where x="Epoch (epoch_to_u64 (current_epoch_f state_ctxt) + 1 + epoch_to_u64 MAX_SEED_LOOKAHEAD)"])
           apply (clarsimp simp: get_exit_epoch_simp get_withdrawable_epoch_simp)
-               apply (sep_mp)
+      apply (sep_mp)
+      apply (clarsimp split: if_splits)
+  apply (sep_mp)
                apply (clarsimp)
-              apply (sep_cancel)+
+     apply (sep_cancel)+
+            apply (intro conjI impI; (clarsimp simp: one_Epoch_def plus_Epoch_def)?)
+      apply (metis epoch_to_u64.simps max_def)
+               apply (sep_cancel)+
+
+     apply (clarsimp simp: Let_unfold)
+  apply (sep_drule split_validator[where vref=vref], clarsimp simp: sep_conj_ac)
+
+     apply (sep_cancel)+
+     apply (sep_drule spec)+
+  apply (clarsimp simp: sep_conj_ac)
+     apply (sep_mp)
+     apply (rule_tac x=x in exI)
+     apply (sep_cancel)+
+  apply (clarsimp simp: get_activation_epoch_simp)
+
+     apply (sep_mp, assumption)
+    apply (sep_cancel)+
+    apply (rule_tac x=x in exI)
+  apply (clarsimp simp: Let_unfold)
+    apply (sep_cancel)+
+    apply (clarsimp split: if_splits)
+    apply (sep_mp, assumption)
+  apply (sep_cancel)+
+
               apply (rule_tac x=val in exI)
               apply (intro conjI impI)
-               apply (sep_cancel)+
-            apply (intro conjI impI; (clarsimp simp: one_Epoch_def plus_Epoch_def)?)
           apply (clarsimp)
-  apply (rule exI, intro conjI impI; clarsimp?)
           apply (sep_cancel)+
-            apply (intro conjI impI; (clarsimp simp: one_Epoch_def plus_Epoch_def)?)
+      apply (intro conjI impI; (clarsimp simp: one_Epoch_def plus_Epoch_def less_eq_Epoch_def)?)
+  (* apply (fastforce)
+  apply (metis epoch_to_u64.simps less_eq_Epoch_def)
          apply (sep_cancel)+
  apply (rule exI, intro conjI impI; clarsimp?)
           apply (sep_cancel)+
-            apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
+            apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?) *)
   defer
            apply (sep_cancel)+
   apply (sep_drule split_validator[where vref=vref], clarsimp simp: sep_conj_ac)
@@ -3326,38 +2306,22 @@ lemma process_single_registry_update_wp[wp]:
           apply (sep_cancel)+
   apply (sep_drule split_validator[where vref=vref], clarsimp simp: sep_conj_ac)
 
- apply (rule exI, intro conjI impI; clarsimp?)
-          apply (sep_cancel)+
-            apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
 
           apply (rule exI, sep_cancel+)
- apply (rule exI, intro conjI impI; clarsimp?)
-          apply (sep_cancel)+
 
-           apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-            apply (metis (no_types, lifting) max.coboundedI2 max.orderE olen_add_eqv)
-           apply (sep_cancel)+
-  apply (sep_drule split_validator[where vref=vref])
+      apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
+(* 
+            apply (metis (no_types, lifting) max.coboundedI2 max.orderE olen_add_eqv) *)
            apply (sep_cancel)+
           apply (rule exI, sep_cancel+)
            apply (clarsimp simp: Let_unfold)
-  apply (sep_drule spec)+
+      apply (sep_drule spec)+
+  apply (clarsimp split: if_splits simp: get_val_fields_simps)
            apply (sep_mp)
            apply (clarsimp simp: get_activation_epoch_simp)
            apply (sep_mp, clarsimp)
           apply (sep_cancel)+
-          apply (rule exI, sep_cancel+)
            apply (clarsimp simp: Let_unfold)
-          apply (sep_mp, clarsimp)
-         apply (sep_cancel)+
-         apply (rule exI, intro conjI impI; clarsimp?)
-         apply (rule exI, intro conjI impI; clarsimp?)
-
-         apply (sep_cancel+)
-           apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-         apply (sep_cancel+)
-         apply (rule exI, intro conjI impI; clarsimp?)
-         apply (sep_cancel+)
            apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
             apply (metis (no_types, lifting) max.coboundedI2 max.orderE olen_add_eqv)
  apply (sep_drule split_validator[where vref=vref])
@@ -3368,95 +2332,14 @@ lemma process_single_registry_update_wp[wp]:
          apply (sep_mp)
  apply (clarsimp simp: get_activation_epoch_simp)
            apply (sep_mp, clarsimp)
-           apply (sep_cancel)+
-          apply (rule exI, sep_cancel+)
-        apply (blast)
-         apply (rule exI, intro conjI impI; clarsimp?)
-           apply (sep_cancel)+
-           apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-        apply (rule exI, sep_cancel+)
-         apply (rule exI, intro conjI impI; clarsimp?)
-         apply (sep_cancel)+
-           apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-            apply (metis (no_types, lifting) max.coboundedI2 max.orderE olen_add_eqv)
-  apply (sep_drule split_validator[where vref=vref])
-         apply (sep_cancel)+
-        apply (rule exI, sep_cancel+)
-        apply (rule exI, sep_cancel+)
-     apply (clarsimp simp: Let_unfold)
-         apply (sep_drule spec)+
-         apply (sep_mp)
-  apply (clarsimp)
-        apply (sep_cancel)+
-  apply (sep_drule split_validator[where vref=vref])
-        apply (rule exI, sep_cancel+)
-        apply (rule exI, sep_cancel+)
-     apply (clarsimp simp: Let_unfold)
-         apply (sep_drule spec)+
-        apply (sep_mp)
-  apply (clarsimp simp: get_exit_epoch_simp get_withdrawable_epoch_simp split: if_splits)
-        apply (sep_mp, clarsimp)
-       apply (sep_cancel)+       
-       apply (rule exI, intro conjI impI; clarsimp?)
-         apply (rule exI, intro conjI impI; clarsimp?)
-       apply (sep_cancel)+       
-           apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-      apply (sep_cancel)+       
-       apply (rule exI, intro conjI impI; clarsimp?)
-       apply (sep_cancel)+       
-           apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-      apply (sep_cancel)+       
-  apply (sep_drule split_validator[where vref=vref])
-      apply (rule exI, sep_cancel+)
-           apply (intro conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-      apply (sep_cancel)+       
-      apply (rule exI, sep_cancel+)
-     apply (sep_drule spec)+
-        apply (sep_mp)
-  apply (clarsimp simp: get_exit_epoch_simp get_withdrawable_epoch_simp split: if_splits)
-        apply (sep_mp, clarsimp)
-           apply (intro exI conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-      apply (sep_cancel)+       
-      apply (rule exI, sep_cancel+)
-           apply (intro exI conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-      apply (sep_cancel)+       
-           apply (intro exI conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-            apply (metis (no_types, lifting) max.coboundedI2 max.orderE olen_add_eqv)
-      apply (sep_cancel)+       
-apply (sep_drule split_validator[where vref=vref])
-      apply (sep_cancel)+       
-      apply (rule exI, sep_cancel+)
-  apply (clarsimp simp: Let_unfold)
-     apply (sep_drule spec)+
-        apply (sep_mp)
-  apply (clarsimp simp: get_exit_epoch_simp get_activation_epoch_simp get_withdrawable_epoch_simp split: if_splits)
-        apply (sep_mp)
-       apply (clarsimp)
-      apply (sep_cancel)+       
-      apply (rule exI, sep_cancel+)
-      apply (clarsimp simp: Let_unfold)
-  apply (clarsimp simp: get_exit_epoch_simp get_activation_epoch_simp get_withdrawable_epoch_simp split: if_splits)
-  apply (sep_mp, clarsimp)
-      apply (sep_cancel)+       
-           apply (intro exI conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-           apply (intro exI conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-     apply (sep_cancel)+
-     apply (rule_tac x=val in exI)
-  apply (erule sep_conj_impl, assumption)
-     apply (sep_cancel)+
-  apply (erule sep_conj_impl, blast)
-     apply (sep_cancel)+
-           apply (intro exI conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-     apply (sep_cancel)+
-           apply (intro exI conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-     apply (sep_cancel)+
-           apply (intro exI conjI impI; (clarsimp simp: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)?)
-     apply (sep_cancel)+
-      apply (rule exI, sep_cancel+)
-  apply (sep_mp, clarsimp)
-            apply (metis (no_types, lifting) max.coboundedI2 max.orderE olen_add_eqv)
-            apply (metis (no_types, lifting) max.coboundedI2 max.orderE olen_add_eqv)
-  done
+    apply (sep_cancel)+
+  apply (clarsimp split: if_splits)
+    apply (rule exI, sep_cancel+)
+  apply (sep_mp, assumption)
+   apply (metis (no_types, lifting) max.coboundedI2 max.orderE olen_add_eqv)
+  by (metis (no_types, lifting) max.coboundedI2 max.orderE olen_add_eqv)
+
+  
 
 
 
@@ -3543,29 +2426,7 @@ lemma new_slashings_context_wp': "(\<And>x. \<lblot>\<lless>P x\<then>\<rblot> c
   apply (rule hoare_weaken_pre, wp)
   by (clarsimp, sep_cancel+)
 
-  thm new_slashings_context_wp[no_vars]
 
-
-lemma div_wp'[wp]: "(\<And>x. hoare_triple (lift (P x)) (c x) Q) \<Longrightarrow>
-  hoare_triple (lift (\<lambda>s. m \<noteq> 0 \<and> (m \<noteq> 0 \<longrightarrow> P ( n div m) s))) 
-(do {x <- (word_unsigned_div n m); c x}) Q"
-  apply (rule hoare_weaken_pre, rule div_wp, assumption)
-  by (clarsimp simp: bindCont_return')
-
-
-lemma mul_wp'[wp]: "(\<And>x. hoare_triple (lift (P x)) (c x) Q) \<Longrightarrow>
-  hoare_triple (lift (\<lambda>s. safe_mul m n  \<and> (safe_mul m n  \<longrightarrow> P (n * m) s))) 
-(do {x <- (word_unsigned_mul n m); c x}) Q"
-  apply (rule hoare_weaken_pre)
-   apply (unfold  word_unsigned_mul_def )
-   apply (simp only: Let_unfold)
-   apply (rule if_wp, simp)
-    apply (fastforce)
-   apply (rule if_wp, simp)
-   apply (wp)
-  apply (clarsimp simp: safe_mul_def)
-  apply (intro conjI impI; clarsimp?)
-  by (simp add: mult.commute)
 
 
 lemma get_current_epoch_wp'[wp]: "(\<And>x. hoare_triple (lift (P x)) (f x) Q) \<Longrightarrow>
@@ -3605,9 +2466,6 @@ lemma var_list_index_lens_wp[wp]:
 lemma unify_helper: "(\<And>g'. g = g' \<Longrightarrow> P (bindCont f g')) \<Longrightarrow> P (bindCont f g)"
   by (blast)
 
-term enumerate
-
-term sep_map_list_conj
 
 definition "offset n \<equiv> 
             (Lens (\<lambda>l. VariableList (drop n (var_list_inner l))) 
@@ -3726,12 +2584,6 @@ lemma "(ref \<mapsto>\<^sub>l VariableList x) s  \<Longrightarrow> length x < 2^
   sorry
   
   
-
-lemma "(ref \<mapsto>\<^sub>l vs) s \<Longrightarrow> 
-  (sep_map_list_conj (\<lambda>i. lens_ocomp (v_list_lens (of_nat i)) ref \<mapsto>\<^sub>l unsafe_var_list_index vs (of_nat i)) ([0..<length(var_list_inner vs)])) s"
-  apply (case_tac vs; clarsimp)
-  apply (induct x)
-  oops
 
 lemma ifI: "P \<longrightarrow> Q \<Longrightarrow> \<not>P \<longrightarrow> R \<Longrightarrow> (if P then Q else R)"
   by (clarsimp)
@@ -4063,12 +2915,6 @@ lemma helper_sequenceI: assumes descend: "\<And>a v n. D (h a v) n \<Longrightar
   apply (drule meta_mp, clarsimp)
   by (erule descend)
 
-lemma helper_sequenceI: assumes descend: "\<And>a v n. D (h a v) n \<Longrightarrow> D v n" shows "D (fold h xs v) n \<Longrightarrow> D v n"
-  apply (induct xs arbitrary: n v; clarsimp)
-  apply (drule_tac x="n" in meta_spec)
-  apply (drule_tac x="(h a v)" in meta_spec)
-  apply (drule meta_mp, clarsimp)
-  by (erule descend)
 
 
 primrec scanl :: "('f \<Rightarrow> 'g \<Rightarrow> 'g) \<Rightarrow> 'f list \<Rightarrow> 'g \<Rightarrow> 'g list" where
@@ -7731,6 +6577,97 @@ lemma length_ejecting_eq: "length (local.var_list_inner (fold (\<lambda>n vs. ej
   apply (clarsimp simp: enumerate_def)
   sorry
 
+thm restore_variablelist[symmetric]
+
+lemma [simp]: "enumerate [] = []" by (clarsimp simp: enumerate_def)
+
+lemma "xs \<noteq> [] \<Longrightarrow>(map word_of_nat [0..<length xs]) @ [word_of_nat (length xs)] = 0#(map word_of_nat [1..<length xs]) @ [word_of_nat (length xs)]"
+  apply (clarsimp)
+  by (simp add: upt_rec)
+  apply (case_tac xs; clarsimp)
+  apply (intro conjI impI ; clarsimp)
+
+lemma length_enuemrate_simp[simp]: "length (enumerate xs) = length xs"
+  by (clarsimp simp: enumerate_def)
+
+lemma enumerate_nth: "n < length xs \<Longrightarrow> length xs < 2^64 \<Longrightarrow>  enumerate xs ! n = (word_of_nat n, xs ! n)"
+  by (clarsimp simp: enumerate_def)
+
+lemma enumerate_simp [simp]: "xs \<noteq> [] \<Longrightarrow> length xs < 2 ^ 64 \<Longrightarrow> enumerate (xs) = (0,hd xs)# (zip (map word_of_nat [1..<length xs]) (tl xs))" 
+  apply (rule nth_equalityI, clarsimp)
+  apply (clarsimp)
+  apply (subst enumerate_nth; clarsimp?)
+    apply (case_tac i; clarsimp)
+   apply (case_tac xs; clarsimp)
+  by (simp add: nth_tl)
+
+
+
+lemma restore_variablelist': "foldr (\<and>*) (map (\<lambda>x. lcomp (v_list_lens (fst x)) ll \<mapsto>\<^sub>l f x) (enumerate xs)) sep_empty = 
+       (ll \<mapsto>\<^sub>l VariableList (map f (enumerate xs))) "
+  apply (induct xs arbitrary: ll; clarsimp?)
+   defer
+   apply (subst enumerate_simp)
+     apply (clarsimp)
+    defer
+    apply (clarsimp)
+    apply (intro conjI impI)
+   apply (subst enumerate_simp)
+     apply (clarsimp)
+      defer
+  apply (clarsimp)
+  sorry
+
+lemma slice_vl: "vl = VariableList (map id (var_list_inner vl))" 
+  by (cases vl; clarsimp)
+
+lemma slice_vl': "vl = VariableList (map snd (enumerate (var_list_inner vl)))" 
+  by (cases vl; clarsimp simp: enumerate_def)
+
+definition "update_var_list_by domain f vs \<equiv> VariableList (map (\<lambda>x. if x \<in> domain then f x else (vs[x]!)) [0..<length (var_list_inner vs)])"
+
+lemma split_vars_by_list: 
+       "(l \<mapsto>\<^sub>l vars) s \<Longrightarrow> (\<And>x. x \<in> list.set xs \<Longrightarrow> unsafe_var_list_index vars x = f x) \<Longrightarrow>
+        (foldr (\<and>*) (map (\<lambda>x. lens_oocomp (v_list_lens x) l \<mapsto>\<^sub>l f x) xs) \<box> \<and>*
+        (ALLS g. (foldr (\<and>*) (map (\<lambda>x. lens_oocomp (v_list_lens x) l \<mapsto>\<^sub>l g x) xs) \<box>) \<longrightarrow>* 
+                 (l \<mapsto>\<^sub>l update_var_list_by (unat ` list.set xs) (g o word_of_nat) vars ))) s"
+  sorry
+  apply (subst (asm) slice_vl')
+  apply (subst (asm) restore_variablelist'[symmetric, where ll=l and f=snd])
+
+definition "linorder_on P S \<equiv> totalp_on S P \<and> reflp_on S P \<and> asymp_on S P \<and> transp_on S P"
+
+lemma linorder_asymp: "linorder_on P S \<Longrightarrow> P x y \<Longrightarrow> P y x \<Longrightarrow> x \<in> S \<Longrightarrow> y \<in> S \<Longrightarrow> x = y"
+  by (clarsimp simp: linorder_on_def asymp_on_def)
+
+lemma "length xs = length ys \<Longrightarrow> sorted_wrt P xs \<Longrightarrow> linorder_on P (list.set xs) \<Longrightarrow> xs \<noteq> [] \<Longrightarrow> sorted_wrt P ys \<Longrightarrow> list.set xs = list.set ys \<Longrightarrow> distinct xs \<Longrightarrow> distinct ys \<Longrightarrow>  xs =  ys"
+  apply (induct xs ys rule: list_induct2; clarsimp)
+  apply (intro conjI impI)
+   apply (subgoal_tac "P x y \<and> P y x")
+    apply (clarsimp)
+  apply (erule linorder_asymp)
+  
+  thm list.inject
+  apply (subgoal_tac "xs = list"; clarsimp?)
+
+find_theorems sorted_wrt hd
+lemma "list.set xs = list.set ys \<Longrightarrow> length xs = length ys \<Longrightarrow> sorted_wrt P xs \<Longrightarrow>
+      sorted_wrt P ys \<Longrightarrow> linear P \<Longrightarrow> xs = ys"
+  apply (induct xs arbitrary: ys; clarsimp)
+  apply (case_tac ys; clarsimp)
+  apply (atomize)
+  apply (erule_tac x=list in allE)
+  apply (clarsimp)
+  apply (intro conjI impI)
+   defer
+  apply (rule nth_equalityI; clarsimp)
+
+lemma "xs \<in> sorted_by_activation_order vs aq \<Longrightarrow> ys \<in> sorted_by_activation_order vs aq \<Longrightarrow> xs = ys "
+  apply (clarsimp simp: sorted_by_activation_order_def)
+
+definition "registry_updated_validators bs vs \<equiv> update_var_list_by (unat ` list.set (take (unat (max (MIN_PER_EPOCH_CHURN_LIMIT config) (word_of_nat (length (active_validator_indices (current_epoch bs) (fold (\<lambda>n vs. eject_active_validator bs vs n) (local.enumerate (local.var_list_inner vs)) vs))) div CHURN_LIMIT_QUOTIENT config))) xs))
+         ((\<lambda>x. unsafe_var_list_index (eject_all_validators bs vs) x\<lparr>activation_epoch_f := Epoch (epoch_to_u64 (current_epoch bs) + 1 + epoch_to_u64 MAX_SEED_LOOKAHEAD)\<rparr>) \<circ> word_of_nat) (eject_all_validators bs vs)"
+
 lemma "(\<And>x. hoare_triple (lift (P x)) (next x) Q) \<Longrightarrow> current_epoch bs \<noteq> GENESIS_EPOCH \<Longrightarrow>
       hoare_triple (lift (\<lambda>s. previous_epoch (current_epoch bs) \<le> previous_epoch (current_epoch bs) + 1 \<and> Checkpoint.epoch_f fc \<in> previous_epochs bs \<and> length (local.var_list_inner vs) < 2^64 \<and>
                        length (local.var_list_inner is) = length (local.var_list_inner vs) \<and> current_epoch bs + 1 \<le> current_epoch bs + 1 \<and> current_epoch bs + 1 \<le> current_epoch bs + 1 + MAX_SEED_LOOKAHEAD \<and>
@@ -7936,14 +6873,23 @@ apply (rule_tac P="\<lambda>x. (lens_oocomp (v_list_lens x)) validators \<mapsto
         apply (sep_mp, clarsimp)
        apply (clarsimp)
        apply (sep_cancel)+
-       defer
+  apply (sep_drule split_vars_by_list[where l=validators])
+        defer
+        apply (clarsimp simp: sep_conj_ac)
+        apply (sep_cancel)+
+        apply (sep_drule spec[where x="\<lambda>x. unsafe_var_list_index (eject_all_validators bs vs) x\<lparr>activation_epoch_f := Epoch (epoch_to_u64 (current_epoch bs) + 1 + epoch_to_u64 MAX_SEED_LOOKAHEAD)\<rparr>"])
+        apply (clarsimp simp: sep_conj_ac)
+
+        apply (sep_mp)
+defer
        apply (fastforce)
       defer
       apply (intro ext; clarsimp)
      apply (clarsimp simp: image_iff)
      apply (clarsimp simp: enumerate_def in_set_zip_iff length_ejecting_eq)
      defer
-     apply (subst length_ejecting_eq, clarsimp)
+      apply (subst length_ejecting_eq, clarsimp)
+  apply (rule refl)
   sorry
 
 lemma sum_vector_wp[wp]: "(\<And>x. hoare_triple (lift (P x)) (next x) Q) \<Longrightarrow> 

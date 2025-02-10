@@ -231,6 +231,32 @@ lemma sub_sanity_max: "run ((2^64 - 1) .- (x :: u64)) \<noteq> \<top>"
 lemma sub_sanity_overflow: "y \<noteq> 0 \<Longrightarrow> run (0 .- y) = \<top>"
   by (fastforce simp: word_unsigned_sub_def run_def Let_unfold return_def fail_def)
 
+definition "safe_mul m n \<equiv> if (m = 0 \<or> n = 0) then True else (m * n div n = m)"
+
+
+
 end
 
+
+instantiation Epoch :: plus
+begin
+definition "plus_Epoch x y \<equiv> Epoch (epoch_to_u64 x + epoch_to_u64 y)"
+instance
+  apply standard
+  done
+end
+
+instantiation Epoch :: one
+begin
+definition  "one_Epoch \<equiv> Epoch 1"
+instance
+  apply standard
+  done
+end
+
+lemma [simp]: "Epoch x \<le> Epoch y \<longleftrightarrow> x \<le> y"
+  by (safe; clarsimp simp: less_eq_Epoch_def)
+
+lemma [simp]: "epoch_to_u64 GENESIS_EPOCH = 0"
+  by (clarsimp simp: GENESIS_EPOCH_def)
 end
