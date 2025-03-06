@@ -143,7 +143,7 @@ definition "eth1_data_votes = Lens eth1_data_votes_f  (\<lambda>(a :: BeaconStat
 
 definition "eth1_deposit_index = Lens eth1_deposit_index_f  (\<lambda>(a :: BeaconState) b. a\<lparr>eth1_deposit_index_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
-definition "validators = Lens validators_f  (\<lambda>(a :: BeaconState) b. a\<lparr>validators_f := b\<rparr> ) (case_option True (\<lambda>xs. let ys = var_list_inner xs in sum_list (map (unat o effective_balance_f) ys) < 2^64 )) |> first"
+definition "validators = Lens validators_f  (\<lambda>(a :: BeaconState) b. a\<lparr>validators_f := b\<rparr> ) (case_option True (\<lambda>xs. (let ys = Invariants.var_list_inner xs in sum_list (map (unat o Validator.effective_balance_f) ys) < 2^(64) \<and> distinct ys \<and> length ys < 2^64 ))) |> first"
 
 definition "balances = Lens balances_f  (\<lambda>(a :: BeaconState) b. a\<lparr>balances_f := b\<rparr> ) (\<lambda>_. True) |> first"
 
@@ -269,6 +269,31 @@ definition write_u64 :: "'var \<Rightarrow> 64 word \<Rightarrow> (unit, 'a) con
   "write_u64 p x \<equiv> do {state <- getState;
                          _ <- lift_option (do {v <- (snd state p); if (is_u64 v) then Some True else None});
                          setState ((fst state), (snd state)(p := Some (u64 x)))}"
+
+
+definition "v_list_lens i \<equiv> 
+            (Lens (\<lambda>l. if unat (i :: 64 word)  < length (var_list_inner l) \<and> length (var_list_inner l) < 2 ^ 64  then Some (var_list_inner l ! unat i) else None) 
+            (\<lambda>l e. case e of (Some e) \<Rightarrow> VariableList (list_update (var_list_inner l) (unat i) e) | _ \<Rightarrow> l) (\<lambda>_. True))"
+
+
+definition "offset n \<equiv> 
+            (Lens (\<lambda>l. VariableList (drop n (var_list_inner l))) 
+            (\<lambda>l e. let xs = var_list_inner l in 
+                  VariableList (take n xs @ take (length xs - n) (var_list_inner e))) (\<lambda>_. True))"
+
+
+
+definition "var_list_index_lens ls i \<equiv> do {
+  l <- read_beacon (v_list_lens i |oo> ls);
+  return (v_list_lens i |oo> ls) }"
+
+notation "var_list_index_lens" (infixr "!?"  88)
+
+abbreviation (input) "mut x \<equiv> x" 
+
+
+
+
 
 adhoc_overloading
   read read_beacon read_list read_u64 read_u8

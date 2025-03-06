@@ -1,5 +1,5 @@
 theory Hoare_Logic
-  imports ProcessEpoch 
+  imports VerifiedConsensus Unsigned Helpers
   Fun_Algebra
   Word_Lib.More_Divides Word_Lib.Word_EqI
 Word_Lib.Word_64 Word_Lib.Bitwise Word_Lib.Word_Lemmas
@@ -93,7 +93,6 @@ end
 
 
   
-  sorry  
 
 text \<open>
 
@@ -187,7 +186,7 @@ definition "lift P s = (\<exists>S. P S \<and> point_of S s = s)"
 
 notation lift ("\<lless>_\<then>")
 
-instantiation BeaconState_ext :: (stronger_sep_algebra) stronger_sep_algebra begin
+(* instantiation BeaconState_ext :: (stronger_sep_algebra) stronger_sep_algebra begin
 
 definition sep_disj_BeaconState_ext :: "'a BeaconState_scheme \<Rightarrow> 'a BeaconState_scheme \<Rightarrow> bool" 
   where "sep_disj_BeaconState_ext x y == x = y"
@@ -287,7 +286,7 @@ definition "zero_BeaconState_ext \<equiv> \<lparr> genesis_time_f = None,
 instance
 
   apply (standard; (clarsimp simp: plus_BeaconState_ext_def sep_disj_BeaconState_ext_def zero_BeaconState_ext_def)?)
-  sorry
+  oops
       apply (clarsimp simp: sep_disj_commute)
   apply (simp add: sep_disj_commute)
     apply (metis sep_add_commute)
@@ -299,10 +298,12 @@ end
 instantiation BeaconState_ext :: (cancellative_sep_algebra) cancellative_sep_algebra begin
 
 instance
-  apply (standard; (clarsimp simp: plus_BeaconState_ext_def sep_disj_BeaconState_ext_def zero_BeaconState_ext_def)?)
+  by (standard; (clarsimp simp: plus_BeaconState_ext_def sep_disj_BeaconState_ext_def zero_BeaconState_ext_def)?)
   using Extended_Separation_Algebra.cancellative_sep_algebra_class.sep_add_cancelD apply blast+
   done
-end
+
+*)
+
 
 
 
@@ -313,6 +314,13 @@ locale hoare_logic = verified_con + strong_spec begin
 definition "hoare_triple P f Q \<equiv>   run f \<le> assert (Collect P); spec (UNIV \<triangleright> (Collect Q)) "
 
 notation hoare_triple ("\<lblot>_\<rblot> _ \<lblot>_\<rblot>")
+
+definition "alloc v f = (\<Sqinter>R. \<Squnion>l. assert (Collect (lift (maps_to l v \<longrightarrow>* R l))); spec (UNIV \<times> Collect (lift (R l))); f l)" 
+
+definition "free l f = (\<Sqinter>R. \<lbrace>Collect \<lless>(EXS v. l \<mapsto>\<^sub>l v) \<and>* R \<then>\<rbrace> ; \<lparr>UNIV \<times> Collect \<lless>R \<then>\<rparr> ; f ())"
+
+
+
 
 lemma hoare_strengthen_post: "hoare_triple P f Q' \<Longrightarrow> Q' \<le> Q \<Longrightarrow> hoare_triple P f Q"
   apply (clarsimp simp: hoare_triple_def le_fun_def)
@@ -650,47 +658,19 @@ lemma write_beacon_sep: " hoare_triple ( lift (maps_to l v \<and>* R)) (write_be
    apply (intro conjI)
     apply (rule_tac x="lens_pset l v'" in exI)
     apply (rule_tac x=ya in exI)
-  apply (intro conjI)(*
-   apply (clarsimp simp: plus_domain_pair_def sep_disj_domain_pair_def sep_disj_BeaconState_ext_def)
-   apply  (rule_tac x="Pair _ (write l (Some v')  o state_of ya)" in exI) 
-   apply (intro conjI)
-    apply (rule_tac x="Pair {f. (\<exists>v. (\<lambda>s. set l s v) = f)} (\<lambda>s. set l  s (Some v'))" in exI)
-    apply (rule_tac x=ya in exI)
-    apply (intro conjI)*)
-
+  apply (intro conjI)
        apply (clarsimp simp: disj_cylindric_set_def sep_disj_p_set_def set_of_lens_pset)
-       apply (intro conjI; clarsimp?)
          apply (clarsimp simp: maps_to_def)
          apply blast
       apply (clarsimp simp: maps_to_def)
   apply (clarsimp)
     apply blast
-  find_theorems name:plus name:simps
   apply (clarsimp simp: plus_p_simps lens_pset_simps)
 
    apply (clarsimp simp: disj_cylindric_set_def sep_disj_p_set_def)
    apply (clarsimp simp: maps_point_simp)
   apply (smt (verit) comp_eq_elim maps_to_def point_in_set set_set_def valid_lens_def)
-(*    apply (frule_tac x="(\<lambda>s. lens.set l s (Some v')) o (\<lambda>s. lens.set l  s (Some v))" in bspec)
-   apply (drule mp)
-    apply (rule_tac x="(Some v')" in exI)
-  apply (clarsimp simp: valid_write_write)
-  
-   apply (clarsimp)
-   apply (clarsimp simp: comp_assoc)
-   apply (subst comp_apply[where f="state_of _" and g="write l (Some _)", symmetric])
-   apply (subst comp_apply[where f="write l (Some _)", symmetric]) back back back
-   apply (subgoal_tac "(state_of ya \<circ> (\<lambda>s. lens.set l s (Some v'))) = (write l (Some v') o (write l (Some v)) o state_of ya)")
-    apply (simp only:)
-    apply (subst comp_apply)+
-    apply (clarsimp)
-    apply (clarsimp simp: comp_assoc)
-    apply (simp add: set_set_def valid_lens_def)
-  apply (subst valid_write_write, assumption)
-  apply metis
 
-  apply (clarsimp simp: )
-    *)
   apply (subst inf.test_sync_to_inf)
   apply (rule test_botI)
   apply (clarsimp)
@@ -907,11 +887,8 @@ lemma swap_sep: "hoare_triple (lift (maps_to l  v \<and>* maps_to l'  v' \<and>*
   apply (clarsimp simp: swap_def)
   apply (rule hoare_weaken_pre)
    apply (rule read_beacon_wp)
-  thm read_beacon_wp
-  thm wp
    apply (rule read_beacon_wp[where v="v'"])
   apply (rule write_beacon_wp)
-   apply (rule wp )+
   apply (rule  write_beacon_wp[where c=return, simplified bindCont_return, OF return_wp])
   apply (clarsimp)
   apply (erule lift_mono, clarsimp)
@@ -1201,38 +1178,7 @@ lemma select_wp_lift[wp]: "(\<And>x. x \<in> P \<Longrightarrow> hoare_triple (l
 end
 
 context hoare_logic begin
-(*
 
-
-
-term list_update
-
-
-definition list_update_opt ::
-  "'e list \<Rightarrow> u64 \<Rightarrow> 'e \<Rightarrow> 'e list option"
-  where
-  "list_update_opt xs i x \<equiv> do {
-    if u64_to_nat i < length (list_inner xs) then
-      Some (List (List.list_update (list_inner xs) (u64_to_nat i) x))
-    else
-      None
-  }"
-
-
-definition "validator n = Lens ((\<lambda>xs. list_index xs n) \<circ>\<^sub>m validators_f)
-                               (\<lambda>a b. let (new_list :: Validator List option) = do {x <- b;  xs <- (validators_f a); list_update_opt xs n x}
-                                in a\<lparr>validators_f := new_list\<rparr> )"
-lemma lift_option_wp[wp]: 
-  "(\<And>x. f = Some x \<Longrightarrow> hoare_triple ( P x) (c x) Q) \<Longrightarrow>
-    hoare_triple (\<lambda>s. (f \<noteq> None \<longrightarrow> P (the f) s) \<and> f \<noteq> None) (do {x <- lift_option f ; c x}) Q"
-  apply (clarsimp simp: lift_option_def)
-  apply (safe)
-  apply (rule hoare_weaken_pre)
-    apply (wp)
-  apply (clarsimp)
-  apply (clarsimp simp: bindCont_return')
-  done
-*)
 lemma fold_increasing_when: "finite S \<Longrightarrow> (\<And>x y. f y x \<ge> x) \<Longrightarrow> comp_fun_commute_on (insert x S) f \<Longrightarrow> Finite_Set.fold f (\<bottom> :: 'e :: {order_bot}) (S) \<le> Finite_Set.fold f \<bottom> (insert x S)"
   apply (case_tac "x \<in> S"; clarsimp?)
   apply (simp add: insert_absorb)
@@ -1308,14 +1254,6 @@ lemma u64_add_is_commutative: " comp_fun_commute_on xs (\<lambda>x acc. bindCont
 lemma [simp]:"comp_fun_commute_on (S :: nat set) (+)"
   by (clarsimp simp: comp_fun_commute_on_def, rule ext, clarsimp)
 
-(*
-lemma "mono f \<Longrightarrow> map f (insort a xs) = insort (f a) (map f xs)" 
-  apply (induct xs; clarsimp)
-  apply (safe)
-  using monoD apply blast
-  using monoD apply blast
-   apply (simp add: monoD order_antisym)
-*)
 
 lemma idk: "finite S \<Longrightarrow> xs = sorted_list_of_set S \<Longrightarrow> mono f \<Longrightarrow> inj f \<Longrightarrow>
   map f xs = sorted_list_of_set (f ` S)"
@@ -1326,65 +1264,5 @@ lemma idk: "finite S \<Longrightarrow> xs = sorted_list_of_set S \<Longrightarro
   apply (simp add: map_insort_sorted)
   by (simp add: inj_image_mem_iff)
 
-(* lemma foldr_safe_add_is_add: "(foldr (\<lambda>x acc. bindCont acc ((.+) x)) x (return (0 :: 64 word))) \<noteq> fail \<Longrightarrow> 
-       return (foldr ((+) \<circ> unat) x (0 :: nat)) = 
-       (do {x <- (foldr (\<lambda>x acc. bindCont acc ((.+) x)) x (return (0 :: 64 word))); return (unat x)})"
-  apply (induct x  ; clarsimp)
-   apply (simp add: bindCont_return')
-  apply (clarsimp simp: bindCont_return' bindCont_return word_unsigned_add_def)
-  apply (rule ext, clarsimp simp: return_def)
-  apply (clarsimp simp: bind_eq_Some_conv)
-  by (smt (verit, ccfv_SIG) bind_eq_Some_conv check_bin_op_def 
-     check_bin_op_then_def option.distinct(1) option.inject u64_add_def u64_to_nat.simps)
-*)
-lemma safe_sum_boundedI: "finite xs \<Longrightarrow> (\<And>x. Finite_Set.fold (+) 0 (unat ` xs) < 2 ^ 64) \<Longrightarrow> (\<exists>y. safe_sum xs = return y)"
-  sorry
-  apply (clarsimp simp: safe_sum_def)
-  apply (induct \<open>sorted_list_of_set xs\<close> arbitrary: xs)
-   apply (clarsimp)
-   apply (rule_tac x=0 in exI)
-  apply (clarsimp simp: foldrM_def)
-  apply (clarsimp)
-  apply (atomize)
-  apply (clarsimp)
-  apply (erule_tac x="xs - {a}" in allE)
-  apply (drule mp, clarsimp?)
-   apply (rule sym)
-  thm append_sorted_list_of_setD
-   apply (erule  append_sorted_list_of_setD[rotated])
-  using finite_code apply blast
-  apply (drule mp, clarsimp)
-  apply (drule mp)
-   apply (erule le_less_trans[rotated])
-   apply (subst inj_image_sub)
-  apply simp
-    apply (meson injI u64_to_nat_bij)
-   apply (rule fold_increasing_when')
-     apply (clarsimp)
-    apply (linarith)
-   apply (simp add: comp_fun_commute_on_def)
-   apply (clarsimp)
-   apply (rule ext, clarsimp)
-  apply (clarsimp)
-  apply (subgoal_tac "a \<in> xs")
-  apply (clarsimp simp: append_sorted_list_of_setD)
-   apply (rule subst, assumption)
-  apply (subst foldrM_def)
-  apply (subst foldr_Cons)
-   apply (clarsimp)
-   apply (subst (asm) foldr_is_fold[symmetric], clarsimp, clarsimp)
-    apply (rule idk, assumption, assumption)
-  using less_eq_u64_def monoI apply blast
-    apply (simp add: inj_def u64_to_nat_bij)
-   apply (subst (asm) list.map(2), simp)
-
-   apply (rule uadd_welldf)
-   apply (clarsimp simp: foldr_map)
-   apply (frule arg_cong[where f="u64_to_nat o the"], clarsimp)
-  apply (subgoal_tac "foldr ((+) \<circ> u64_to_nat) x 0 = u64_to_nat (the (foldr (\<lambda>x acc. acc \<bind> (.+) x) x (Some (u64.u64 0))))")
-  
-    apply (clarsimp)
-   apply (rule foldr_safe_add_is_add, assumption)
-  by (metis insertCI list.simps(15) sorted_list_of_set.set_sorted_key_list_of_set)
 end
 end

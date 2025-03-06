@@ -5,6 +5,77 @@ begin
 declare [[show_sorts=false]]
 declare [[show_types=false]]
 
+
+lemma "(P -* P \<and>* R) s \<Longrightarrow> (P -* (P \<and>* (P \<longrightarrow>* (P \<and>* R)))) s"
+  apply (rule septract_cancel[rotated], assumption)
+   apply (rule sep_conj_impl[rotated], assumption)
+    apply (erule sep_curry', assumption, assumption)
+  done
+
+lemma "(P -* P \<and>* R) s \<Longrightarrow> (P -* (P \<and>* (P \<longrightarrow>* R))) s"
+  apply (rule septract_cancel, assumption, assumption)
+  apply (sep_cancel)
+  apply (clarsimp simp: sep_conj_def sep_impl_def)
+  oops
+
+lemma "(P \<and>* R) s \<Longrightarrow> (P \<and>* (P -* P \<and>* R)) s"
+  apply (clarsimp simp: sep_conj_def sep_impl_def septraction_def pred_neg_def)
+  apply (rule_tac x="x" in exI)
+  apply (rule_tac x=y in exI)
+  apply (clarsimp)
+  apply (rule_tac x=x in exI)
+  apply (clarsimp simp: sep_disj_commute)
+  apply (rule_tac x=x in exI, clarsimp)
+  by (metis sep_add_commute)
+
+
+
+
+lemma septractI_conj: "(\<And>s. Q s \<Longrightarrow> P s) \<Longrightarrow> (\<And>s h. s ## h \<Longrightarrow> P s \<Longrightarrow> \<exists>s'. Q s' \<and> s' ## h) \<Longrightarrow>  (P \<and>* R) s \<Longrightarrow> (P \<and>* (P -* Q \<and>* R)) s"
+  apply (clarsimp simp: septraction_def sep_conj_def sep_impl_def pred_neg_def)
+  sorry
+  apply (rule sep_conj_impl[rotated, where Q="(not (P \<longrightarrow>* not (P \<and>* R)))"], assumption)
+   apply (clarsimp simp: pred_neg_def)
+   apply (erule notE)
+   apply (sep_cancel)
+  apply (sep_mp)
+  apply (rule septract_cancel[rotated])
+  apply (clarsimp simp: sep_conj_def sep_impl_def septraction_def pred_neg_def)
+  apply (rule_tac x="x" in exI)
+  apply (rule_tac x=y in exI)
+  apply (clarsimp)
+  apply (rule_tac x=x in exI)
+  apply (clarsimp simp: sep_disj_commute)
+  apply (rule_tac x=x in exI)
+  oops
+  by (metis sep_add_commute)
+
+lemma maps_to_mutual_disjoint: "maps_to l v s \<Longrightarrow> s ## h \<Longrightarrow> \<exists>s'. maps_to l v' s' \<and> s' ## h"
+  by (metis maps_to_def maps_to_lens_pset' sep_disj_p_set_def)
+
+lemma "\<forall>c P Q . (\<forall>x. hoare_triple (lift (P x \<and>* (EXS n. num_active_validators \<mapsto>\<^sub>l n))) (c x) Q) \<longrightarrow>
+   (\<exists>P.  hoare_triple (lift P) (bindCont get_validator_churn_limit c) Q 
+ \<and> (\<exists>P'. hoare_triple (lift P') (bindCont get_validator_churn_limit_fast c) (Q) \<and> ( P \<le> ((EXS n. num_active_validators \<mapsto>\<^sub>l n) \<and>* ((EXS n. num_active_validators \<mapsto>\<^sub>l n) -* P')))))" 
+  apply (clarsimp)
+  apply (rule exI)
+  apply (intro conjI)
+    apply (rule get_validator_churn_limit_spec')
+  apply (erule_tac x=x in allE)
+    apply (assumption)
+  apply (rule exI)
+  apply (intro conjI)
+   apply (rule get_validator_churn_limit_fast_wp)
+   apply (fastforce)
+  apply (clarsimp)
+  apply (sep_mp)
+  apply (rule septractI_conj, blast)
+    apply (clarsimp)
+  apply (erule (1) maps_to_mutual_disjoint)
+
+  apply (sep_cancel)+
+  apply (blast)
+  done
+
 lemma sep_conj_impl_emptyI: "P s \<Longrightarrow> (\<And>s. Q s \<Longrightarrow> R s) \<Longrightarrow> (P \<and>* (Q \<longrightarrow>* R)) s"
   by (metis sep_add_zero sep_add_zero_sym sep_conjI sep_disj_zero sep_implI)
 

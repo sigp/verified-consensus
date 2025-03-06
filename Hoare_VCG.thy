@@ -2,6 +2,9 @@ theory Hoare_VCG
 imports Hoare_Logic ProcessEpoch
 begin
 
+
+
+
 context hoare_logic begin
 
 lemma if_wp[wp]: 
@@ -9,6 +12,32 @@ lemma if_wp[wp]:
    hoare_triple ( lift (if B then S else S'))  (do {x <- (if B then P else Q); c x}) R"
   apply (clarsimp split: if_splits)
   done
+
+
+
+definition "const_p s \<equiv> Abs_p_set (Pair {id, (\<lambda>_. s)} (\<lambda>_. s))"
+
+lemma point_of_const_p[simp]: "point_of (const_p s) = (\<lambda>_. s)"
+  apply (clarsimp simp: const_p_def point_of_def)
+  thm Abs_p_set_inverse
+  by (subst Abs_p_set_inverse; clarsimp?)
+
+lemma hoare_assert_state_liftI:"(\<And>s. lift ( P) s \<Longrightarrow> hoare_triple (lift (\<lambda>s'. \<forall>s''. point_of s' s'' = s )) f Q) \<Longrightarrow> hoare_triple (lift P) f Q"
+  apply (clarsimp simp: hoare_triple_def assert_galois_test)
+  apply (subst test_split)
+  apply (subst Nondet_seq_distrib)
+  apply (subst Sup_le_iff)
+  apply (clarsimp)
+  apply (rule order_trans[rotated])
+   apply (assumption)
+  apply (rule seq_mono)
+   apply (subst test.hom_iso[symmetric])
+   apply (simp add: lift_def, clarsimp)
+  apply (rule_tac x= "const_p (a,b)" in exI)
+   apply (fastforce)
+  apply (clarsimp)
+  done
+
 
 lemma read_beacon_wp[wp]: "(\<And>x. x = v \<Longrightarrow> hoare_triple ( lift (P x)) (c x) (Q )) \<Longrightarrow> hoare_triple (lift (maps_to l v \<and>* (maps_to l v \<longrightarrow>*  (P v )))) (do {v <- read_beacon l ; c v}) (Q  )"
   apply (clarsimp simp: hoare_triple_def bindCont_def run_def read_beacon_def getState_def )
@@ -42,6 +71,56 @@ lemma read_beacon_wp[wp]: "(\<And>x. x = v \<Longrightarrow> hoare_triple ( lift
    apply (drule maps_to_get_wf, clarsimp)
   apply (drule maps_to_get_wf, clarsimp)
   done
+
+
+lemma lift_exD: "lift (\<lambda>s. \<exists>x. P x s) s \<Longrightarrow> \<exists>x. lift (\<lambda>s. P x s) s"
+  apply (unfold lift_def, clarsimp)
+  apply (fastforce)
+  done
+
+lemma hoare_all_ex: "(\<And>x. hoare_triple (lift (P x)) f Q) \<Longrightarrow> hoare_triple (lift (EXS x. P x)) f Q"
+  apply (rule hoare_assert_state_liftI)
+  apply (clarsimp)
+  apply (drule lift_exD, clarsimp)
+  apply (rule hoare_weaken_pre, fastforce)
+  apply (clarsimp simp: lift_def)
+  by (rule_tac x=S in exI, fastforce)
+
+lemma read_beacon_wp_ex[wp]: "(\<And>x. hoare_triple ( lift (P x)) (c x) (Q )) \<Longrightarrow> 
+hoare_triple (lift ((EXS v. maps_to l v \<and>* (maps_to l v \<longrightarrow>*  (P v ))))) (do {v <- read_beacon l ; c v}) (Q  )"
+  apply (rule hoare_all_ex)
+  apply (rule read_beacon_wp)
+  by (fastforce)
+
+
+lemma write_beacon_wp': "\<lblot>\<lless>P\<then>\<rblot> c () \<lblot>Q\<rblot> \<Longrightarrow> \<lblot>\<lless>(EXS v. l \<mapsto>\<^sub>l v) \<and>* (l \<mapsto>\<^sub>l v' \<longrightarrow>* P)\<then>\<rblot> bindCont (write_to l v') c \<lblot>Q\<rblot>"
+  apply (rule hoare_assert_state_liftI)
+  apply (clarsimp simp: sep_conj_exists1)
+  apply (drule lift_exD, clarsimp)
+
+  apply (rule hoare_weaken_pre)
+   apply (rule write_beacon_wp, fastforce)
+  apply (clarsimp simp: lift_def)
+  by (fastforce)
+
+
+lemma free_wp[wp]:" \<lblot>\<lless>P ()\<then>\<rblot> c () \<lblot>Q\<rblot> \<Longrightarrow> \<lblot>\<lless>\<lambda>s.  ((EXS v. l \<mapsto>\<^sub>l v) \<and>* P ()) s\<then>\<rblot> (bindCont (free l) c) \<lblot>Q\<rblot>"
+  apply (clarsimp simp: free_def hoare_triple_def run_def bindCont_def)
+  apply (rule Inf_lower2)
+  apply (clarsimp simp: image_iff)
+   apply (rule_tac x="P ()" in exI)
+   apply (rule refl)
+  apply (rule order_trans)
+   apply (rule seq_mono_right)
+   apply (assumption)
+  apply (rule order_trans)
+   apply (rule hoare_chain')
+   apply (rule order_refl)
+  apply (rule seq_mono_left)
+  apply (subst assert_iso[symmetric])
+  by (clarsimp)
+
+
 
 
 
@@ -293,8 +372,8 @@ lemma nonempty_ball_conj_lift: "S \<noteq> {} \<Longrightarrow> (\<forall>x\<in>
 lemma nonempty_ball_imp_lift: "S \<noteq> {} \<Longrightarrow> (\<forall>x\<in>S. P \<longrightarrow> Q x) = (P \<longrightarrow> (\<forall>x\<in>S. Q x))"
   by (safe; clarsimp?)
 
-lemma effective_balance_safe[simp]:
- "MAX_EFFECTIVE_BALANCE \<le> MAX_EFFECTIVE_BALANCE + EFFECTIVE_BALANCE_INCREMENT config" sorry 
+
+
 
 lemma range_empty_iff: " (range x y z) = [] \<longleftrightarrow> (x \<ge> y) \<or> z = 0"
   apply (case_tac z; clarsimp)
@@ -304,7 +383,6 @@ lemma start_in_valid_range[simp]: "range x y z \<noteq> [] \<Longrightarrow> x \
   apply (clarsimp simp: range_empty_iff)
   by (case_tac z; clarsimp?)
 
-lemma EBI_ge_zero[intro]: "EFFECTIVE_BALANCE_INCREMENT config > 0" sorry
 
 
 lemma hoare_eqI''': "hoare_triple (lift (P x)) (f x) Q \<Longrightarrow> v = x \<Longrightarrow>  hoare_triple (lift (P v)) (f v) Q"
@@ -596,18 +674,6 @@ lemma mapM_factor_ex: assumes mono_f:
   apply (blast)
   done
   
-  apply (rule_tac x=a in exI)
-  apply (rule_tac x=x in exI, sep_cancel)+
-  apply (erule sep_curry[rotated])
-  apply (sep_select_asm 2)
-  apply (atomize)
-  apply (erule_tac x="\<lambda>aa. R (a # aa)" in allE) 
-  apply (erule_tac x="h" in allE) 
-  apply (drule mp)
-   apply (rule_tac x=x in exI)
-  apply (sep_cancel)
-  apply (sep_solve)
-  done
 
 lemma mapM_rewriteI: "mapM g xs R s \<Longrightarrow> (\<And>a b c. b \<ge> c  \<Longrightarrow> f a b \<ge> g a c) \<Longrightarrow>  mapM f xs R s"
   apply (induct xs arbitrary: R s; clarsimp?)
@@ -637,11 +703,6 @@ lemma mapM_lift_if: "R (map (\<lambda>x. if B x then f x else g x) xs) s  \<Long
   apply (intro conjI impI; clarsimp?)
   done
 
-lemma mapM_lift_if: "R (map g xs) s  \<Longrightarrow> mapM f xs R s"
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  done
 
 lemma mapM_lift_imp: "(\<forall>x\<in>list.set xs. (B x \<longrightarrow> P x)) \<longrightarrow> R (map (\<lambda>x. if B x then f x else g x) xs) s  \<Longrightarrow> mapM (\<lambda>x R s. if B x then P x \<longrightarrow> R (f x) s else R (g x)s) xs R s"
   apply (clarsimp)
@@ -649,20 +710,8 @@ lemma mapM_lift_imp: "(\<forall>x\<in>list.set xs. (B x \<longrightarrow> P x)) 
   apply (intro conjI impI; clarsimp?)
   done
 
-lemma mapM_lift_imp: " mapM f xs R s \<and> mapM g xs R s \<Longrightarrow> mapM (\<lambda>x R s. (f R x s) \<and> g R x s) xs R s"
-  apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
-  apply (intro conjI impI; clarsimp?)
-  done
 
   
-
-lemma mapM_lift_over_if: "mapM (\<lambda>x R . P (if B x then (f R x ) else (g R x))) xs R s \<Longrightarrow> mono P \<Longrightarrow> mono f \<Longrightarrow> mono g \<Longrightarrow> mapM (\<lambda>x R s. if B x then P (f R x) s else P (g R x) s) xs R s"
-  apply (clarsimp)
-  apply (erule mapM_rewriteI)
-  apply (clarsimp)
-  apply (intro conjI impI; clarsimp?)
-  sorry
 
 lemma factor_conj: "(\<lambda>x R s. (if C x s then (\<lambda>s. P x s \<and> A x R s) else (\<lambda>s. B x R s)) s) = (\<lambda>x R s. (C x s \<longrightarrow> P x s) \<and> (if C x s then A x R s else B x R s))" 
   apply (intro ext conjI impI iffI; clarsimp?)
@@ -696,25 +745,27 @@ lemma mapM_lift_over_if: "mapM (\<lambda>x R . (if B x then (\<lambda>s. P x R \
   apply (clarsimp)
   apply (erule mapM_rewriteI)
   apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
   apply (intro conjI impI; clarsimp?)
-  sorry
+   apply (metis monotoneD predicate2D)
+  by (metis monotoneD predicate2D)
 
-lemma mapM_lift_over_if: "mapM (\<lambda>x R . P (if B x then (f R x ) else (g R x))) xs R s \<Longrightarrow> mono P \<Longrightarrow> mono f \<Longrightarrow> mono g \<Longrightarrow> mapM (\<lambda>x R s. if B x then P (f R x) s else P (g R x) s) xs R s"
+
+lemma mapM_lift_over_if2: "mapM (\<lambda>x R . P (if B x then (f R x ) else (g R x))) xs R s \<Longrightarrow> mono P \<Longrightarrow> mono f \<Longrightarrow> mono g \<Longrightarrow> mapM (\<lambda>x R s. if B x then P (f R x) s else P (g R x) s) xs R s"
   apply (clarsimp)
   apply (erule mapM_rewriteI)
   apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
   apply (intro conjI impI; clarsimp?)
-  sorry
+  apply (metis (full_types) le_boolD le_funE monotoneD)
+  by (metis (full_types) le_boolD le_funE monotoneD)
+
 
 lemma mapM_lift_over_if': "mapM (\<lambda>x R s. P (if B x then (f R x s) else (g R x s))) xs R s \<Longrightarrow> mono P \<Longrightarrow> mono f \<Longrightarrow> mono g \<Longrightarrow> mapM (\<lambda>x R s.  (B x \<longrightarrow> P (f R x s)) \<and> (\<not> B x \<longrightarrow> P (g R x s))) xs R s"
-  apply (clarsimp)
   apply (erule mapM_rewriteI)
   apply (clarsimp)
-  apply (induct xs arbitrary: R s; clarsimp simp: bindCont_def return_def)
   apply (intro conjI impI; clarsimp?)
-  sorry
+   apply (smt (verit, del_insts) UNIV_I le_bool_def le_fun_def monotone_on_def)
+  by (smt (verit, del_insts) UNIV_I le_bool_def le_fun_def monotone_on_def)
+
 
 
 named_theorems mono_thms
@@ -807,6 +858,440 @@ lemma mul_wp'[wp]: "(\<And>x. hoare_triple (lift (P x)) (c x) Q) \<Longrightarro
   apply (intro conjI impI; clarsimp?)
   by (simp add: mult.commute)
 
+lemma mono_ex[mono_thms]: "(\<And>n. mono (f n)) \<Longrightarrow> mono (\<lambda>R s. \<exists>n. f n R s)"
+  apply (rule monoI; clarsimp)
+  apply (rule_tac x=n in exI)
+  by (meson monoE predicate1D)
+
+lemma foldr_eq: " foldr (\<lambda>a b c d. a c (\<lambda>a. b a d)) (map (\<lambda>x xs c. f x (\<lambda>a. c (xs @ [a]))) xs) (\<lambda>a b. b a) ys (\<lambda>a. x (aa # a)) =
+                        foldr (\<lambda>a b c d. a c (\<lambda>a. b a d)) (map (\<lambda>x xs c. f x (\<lambda>a. c (xs @ [a]))) xs) (\<lambda>a b. b a) (aa#ys) x" 
+
+  by (induct xs arbitrary: ys ; clarsimp simp: k_comp_def bindCont_def return_def)
+
+
+
+definition "foldlM f xs = foldr k_comp (map f xs) return "
+
+
+definition foldrM' 
+  where "foldrM' f z xs = foldl (\<lambda>f g. k_comp f g) (return) (map f xs)  z  "
+
+
+primrec sequence :: "(('e, 'r) cont) list \<Rightarrow> ('e list, 'r) cont" where
+  "sequence (x#xs) = do {a <- x ; b <- sequence xs; return (a # b)} " |
+  "sequence [] = return []"
+
+
+lemma mapM_is_foldr_map: "mapM f xs = foldr (\<lambda>x xs. do {y <- x; ys <- xs; return (y # ys)}) (map f xs) (return []) "
+  apply (clarsimp simp: foldlM_def foldrM_def comp_def bindCont_def return_def k_comp_def)
+  by (induct xs; clarsimp simp: bindCont_def return_def foldrM_def k_comp_def return_def)
+
+lemma mapM_is_sequence_map: "mapM f xs = sequence (map f xs) "
+  by (induct xs; clarsimp simp: bindCont_def return_def foldrM_def k_comp_def return_def)
+
+lemma mono_sequence: "\<forall>f\<in>(list.set xs). mono f \<Longrightarrow> mono (sequence xs)"
+  apply (induct xs; clarsimp intro!: monoI simp: return_def bindCont_def)
+   apply (erule le_funD)
+  apply (erule monoD)
+  apply (rule le_funI)
+  apply (erule monoD)
+  apply (rule le_funI)
+   apply (erule le_funD)
+  done
+
+lemma mono_mapM: "(\<And>a. mono (f a)) \<Longrightarrow> mono (mapM f xs)" 
+  apply (subst mapM_is_sequence_map)
+  apply (rule mono_sequence)
+  apply (clarsimp)
+  done
+
+
+
+lemma seq_map_exsI: "(\<And>a b. mono (f a b)) \<Longrightarrow> (EXS g. sequence (map (\<lambda>x. f (g x) x) xs) R) s \<Longrightarrow> (sequence (map (\<lambda>c s r. \<exists>x. f x c s r) xs) R) s "
+  
+  apply (induct xs arbitrary: R s ; clarsimp simp: return_def)
+  apply (clarsimp simp: bindCont_def return_def)
+  apply (rule_tac x="x a" in exI)
+  apply (atomize, erule_tac x="x a" in allE, erule_tac x="a" in allE)
+  apply (drule monoD)
+   defer
+   apply (drule_tac x=s in le_funD)
+  using le_boolD apply blast
+  apply (clarsimp)
+  apply (blast)
+  done
+
+lemma seq_map_factor: "sequence (map (\<lambda>x R s.  (B x \<longrightarrow> P (f R x s)) \<and> (\<not> B x \<longrightarrow> P (g R x s))) xs) R = sequence (map (\<lambda>x R s. P (if B x then (f R x s) else (g R x s))) xs) R "
+  by (clarsimp)
+
+lemma seq_map_factor': "sequence (map (\<lambda>x R s. if B x then P (f R x) s else P (g R x) s) xs) R = 
+                        sequence (map (\<lambda>x R . P (if B x then (f R x ) else (g R x))) xs) R "
+  apply (subst map_cong[where g="(\<lambda>x R. P (if B x then f R x else g R x)) "])
+    apply (rule refl)
+  apply (intro ext)
+  apply (clarsimp)
+  by (clarsimp)
+
+
+lemma list_nonempty_induct:
+  "\<lbrakk> xs \<noteq> []; \<And>x. P [x]; \<And>x xs. xs \<noteq> [] \<Longrightarrow> P xs \<Longrightarrow> P (x # xs)\<rbrakk> \<Longrightarrow> P xs"
+  by(induction xs rule: induct_list012) auto
+
+lemma sym_eq: "(x = y) = (y = x)"
+  by (safe; clarsimp)
+
+
+lemma commute_sequence: "(\<And>a. a \<in> list.set xs \<Longrightarrow> \<forall>v. f (\<lambda>x. a (v x)) = a (\<lambda>a. f (\<lambda>aa. v aa a))) \<Longrightarrow> sequence (xs) (\<lambda>aa. f (\<lambda>x. g x aa))  =
+                      f (\<lambda>a. sequence (xs) (g a)) "
+  apply (induct xs arbitrary: g)
+   apply (clarsimp simp: return_def bindCont_def)
+  apply (clarsimp simp: return_def bindCont_def)
+ apply (atomize)
+  apply (erule_tac x=a in allE)
+  apply (clarsimp)
+  done
+
+lemma mapM_split:  "(\<And>x a R. x \<in> list.set xs \<Longrightarrow> f a (\<lambda>y. P x \<and>* (P x \<longrightarrow>* R y x)) = (P x \<and>* (P x \<longrightarrow>* f a (\<lambda>y. R y x)))) \<Longrightarrow>
+  sequence (map (\<lambda>x R. P x \<and>* (P x \<longrightarrow>* f x R)) xs) R = (sequence (map (\<lambda>x R. (P x \<and>* (P x \<longrightarrow>* R x))) xs)  (\<lambda>xs. sequence (map f xs) R)) "
+  apply (induct xs arbitrary: R)
+   apply (clarsimp simp: return_def bindCont_def)
+    apply (clarsimp simp: return_def bindCont_def)
+  apply (subst commute_sequence[where f="f _"])
+   defer
+   apply (clarsimp)
+  by (clarsimp)
+
+lemma "(\<lambda>R. f a (\<lambda>y. g x (R y x))) = (bindCont (f a) (\<lambda>y f. g x (f y x))) "
+  apply (clarsimp simp: bindCont_def)
+  oops
+
+
+lemma mapM_split_gen:  "(\<And>x a R. x \<in> list.set xs \<Longrightarrow> f a (\<lambda>y. g x (R y x)) =  g x (f a (\<lambda>y. R y x))) \<Longrightarrow>
+  sequence (map (\<lambda>x R. g x (f x R)) xs) R = (sequence (map(\<lambda>x R. g x (R x)) xs)  (\<lambda>xs. sequence (map f xs) R)) "
+  apply (induct xs arbitrary: R)
+   apply (clarsimp simp: return_def bindCont_def)
+    apply (clarsimp simp: return_def bindCont_def)
+  apply (subst commute_sequence[where f="f _"])
+   defer
+   apply (clarsimp)
+  by (clarsimp)
+
+
+lemma strange: "\<forall>y\<in>{x}. P (f y) \<Longrightarrow> P (f x)"
+  apply (blast)
+  done
+
+
+
+lemma seq_map_lift: "(P \<and>* (P \<longrightarrow>* R (map f xs))) s \<Longrightarrow>
+           sequence (map (\<lambda>x R. (P \<and>*
+                       ( P \<longrightarrow>* R (f x)))) xs) R  s"
+  apply (induct xs arbitrary: R s; clarsimp simp: return_def)
+   apply (sep_mp, clarsimp)
+  apply (clarsimp simp: return_def bindCont_def)
+  apply (sep_cancel)+
+  apply (sep_select_asm 2)
+  apply (atomize)
+  apply (erule_tac x="\<lambda>xs. R (f a # xs)" in allE) 
+  by blast
+
+
+lemma lift_pure_sequence_map: "(\<forall>x\<in>(list.set xs). P x) \<and> ((\<forall>x\<in>(list.set xs). P x ) \<longrightarrow> sequence (map f xs) R s) \<Longrightarrow> (\<And>a. mono (f a)) \<Longrightarrow>
+           (sequence (map (\<lambda>x R s. (P x  \<and>
+                       ( P x  \<longrightarrow> f x R s))) xs)) R s"
+    apply (induct xs arbitrary: R s)
+     apply (clarsimp)
+    apply (safe)
+  apply (clarsimp simp: return_def bindCont_def)
+  apply (atomize)
+  apply (erule_tac x=a in allE)
+  apply (drule monoD)
+   defer
+   apply auto[1]
+  apply (rule le_funI)+
+  apply (clarsimp)
+  done
+
+
+lemma seq_left_if_cond[simp]: "sequence (map (\<lambda>x R s. if B x s then (P x s \<and> (P x s \<longrightarrow> f x R s)) else g x R s) xs ) R = 
+       sequence (map (\<lambda>x R s. (B x s \<longrightarrow> P x s) \<and> ((B x s \<longrightarrow> P x s) \<longrightarrow> (if B x s then f x R s else g x R s))) xs ) R"
+  by (induct xs arbitrary: R; clarsimp simp: return_def)
+
+lemma swap_if: " x \<in> xs \<Longrightarrow>  (B x \<Longrightarrow> f x (\<lambda>b. g x xs b R) = (\<lambda>b. g x xs b (f x R))) \<Longrightarrow> (\<not> B x \<Longrightarrow> f x (\<lambda>b. h x xs b R) = (\<lambda>b. h x xs b (f x R))) \<Longrightarrow>
+       f x (if B x
+          then (\<lambda>b. g x xs b R)
+          else (\<lambda>b. h x xs b R))  =
+        (if B x
+          then (\<lambda>b. g x xs b (f x R))
+          else (\<lambda>b. h x xs b (f x R)))"
+  by (clarsimp split: if_splits)
+
+
+lemma seq_left_if_cond'[simp]: "sequence (map (\<lambda>x R. if B x then (\<lambda>s. (P x s \<and> (P x s \<longrightarrow> f x R s))) else g x R) xs ) R = 
+       sequence (map (\<lambda>x R s. (B x \<longrightarrow> P x s) \<and> ((B x \<longrightarrow> P x s) \<longrightarrow> (if B x then f x R s else g x R s))) xs ) R"
+  apply (rule arg_cong[where f="\<lambda>xs. sequence xs R"])
+  apply (rule map_cong; clarsimp?)
+  by (intro ext iffI; clarsimp split: if_splits)
+
+
+abbreviation (input) Fi  ("(fi (_)/ then (_)/ else (_))" [0, 0, 10] 10)
+  where "Fi P x y \<equiv> if P then y else x"
+
+
+lemma seq_right_if_cond[simp]: "sequence (map (\<lambda>x R s. fi B x s then (P x s \<and> (P x s \<longrightarrow> f x R s)) else g x R s) xs ) R = 
+       sequence (map (\<lambda>x R s. (\<not>B x s \<longrightarrow> P x s) \<and> ((\<not>B x s \<longrightarrow> P x s) \<longrightarrow> (fi B x s then f x R s else g x R s))) xs ) R"
+  by (induct xs arbitrary: R; clarsimp simp: return_def bindCont_def)
+
+lemma seq_right_if_cond'[simp]: "sequence (map (\<lambda>x R. fi B x then (\<lambda>s. (P x s \<and> (P x s \<longrightarrow> f x R s))) else g x R) xs ) R = 
+       sequence (map (\<lambda>x R s. (\<not>B x \<longrightarrow> P x s) \<and> ((\<not>B x \<longrightarrow> P x s) \<longrightarrow> (fi B x then f x R s else g x R s))) xs ) R"
+  apply (rule arg_cong[where f="\<lambda>xs. sequence xs R"])
+  apply (rule map_cong; clarsimp?)
+  by (intro ext iffI; clarsimp split: if_splits)
+
+lemma factor_R: "(\<lambda>x R s. if B x s then R (f x s) s else R (g x s) s) =  (\<lambda>x R s. R (if B x s then (f x s) else (g x s)) s)"
+  by (intro ext, clarsimp split: if_splits)
+
+
+lemma factor_R': "(\<lambda>x R. if B x then R (f x) else R (g x) ) =  (\<lambda>x R. R (if B x then (f x ) else (g x )) )"
+  by (intro ext, clarsimp split: if_splits)
+
+lemma seq_simp: "sequence (map (\<lambda>x R s. R (f s x) s) xs) R s = R (map (f s) xs) s"
+  by (induct xs arbitrary: R; clarsimp simp: return_def bindCont_def)
+
+
+lemma assumes R_split: "(\<And>x xs s. R (x#xs) s \<Longrightarrow> (R [x] \<and>* R xs) s)" shows
+ "(P \<and>* R (map (if B then f else g) xs))  s \<Longrightarrow>  sequence (map (\<lambda>x R. (P  \<and>* (P  \<longrightarrow>* (if B then R (f x) else R (g x))))) xs) (\<lambda>xs. (P \<and>* R xs)) s"
+  apply (subst mapM_split)
+   apply (clarsimp split: if_splits)
+  apply (rule seq_map_lift)
+  apply (sep_cancel)+
+  apply (erule sep_curry[rotated])
+  apply (simp add:  factor_R' seq_simp)
+  apply (sep_cancel)
+  by presburger
+
+lemma sequence_mono: "sequence (map g xs) R s \<Longrightarrow> (\<And>x R s. x \<in> list.set xs \<Longrightarrow> g x R s \<Longrightarrow> f x R s) \<Longrightarrow> (\<And>a. mono (g a)) \<Longrightarrow>  sequence (map f xs) R s"
+  apply (induct xs arbitrary: s R; clarsimp simp: return_def bindCont_def)
+  by (smt (verit, best) monotoneD predicate1D predicate2I)
+
+lemma sequenceI_rewriting: assumes rewrite_loop: "(\<And>x R s. x \<in> list.set xs \<Longrightarrow>  (I \<and>* P x \<and>* (Q x \<and>* I \<longrightarrow>* R (g x))) s \<Longrightarrow> f x R s)"
+  shows " (I \<and>* (foldr sep_conj (map P xs) sep_empty) \<and>* 
+           ( (foldr sep_conj (map Q xs) sep_empty) \<and>* I \<longrightarrow>* R (map g xs))) s \<Longrightarrow>  sequence (map f xs) R s"
+  apply (rule sequence_mono[rotated])
+    apply (erule (1) rewrite_loop)
+  apply (intro mono_thms)
+  apply (induct xs arbitrary: R s; clarsimp simp: return_def)
+  apply (sep_mp, clarsimp)
+  apply (clarsimp simp: bindCont_def return_def)
+  apply (sep_cancel)+
+  by (smt (z3) sep.mult.left_commute sep.mult_assoc sep_conj_impl sep_curry sep_mp_gen)
+
+lemma foldr_pure:  "(foldr sep_conj (map (\<lambda>x s. sep_empty s \<and> f x) xs) sep_empty \<and>* R) = (\<lambda>s. (\<forall>x\<in>(list.set xs). f x) \<and> R s)"
+  by (induct xs arbitrary: ; clarsimp)
+
+declare mapM_fake[wp]
+
+
+lemma letI: "(\<And>x. x = y \<Longrightarrow> P x) \<Longrightarrow> (let x = y in P x)"
+  by (fastforce simp: Let_unfold)
+
+
+lemma letE: "(let x = y in P x) \<Longrightarrow> (\<And>x. x = y \<Longrightarrow> P x \<Longrightarrow> Q) \<Longrightarrow> Q"
+  by (fastforce simp: Let_unfold)
+
+
+lemma sequenceI_rewriting': assumes rewrite_loop: "(\<And>x R s. x \<in> list.set xs \<Longrightarrow> \<exists>n. (I \<and>* P x \<and>* S n \<and>* (Q x \<and>* I \<and>* S (h n x) \<longrightarrow>* R (g x))) s \<Longrightarrow> f x R s)"
+  shows " (I \<and>* S n \<and>* (foldr sep_conj (map P xs) sep_empty) \<and>* 
+           ( (foldr sep_conj (map Q xs) sep_empty) \<and>* I \<and>* S (foldl h n xs) \<longrightarrow>* R (map g xs))) s \<Longrightarrow>  sequence (map f xs) R s"
+  apply (rule sequence_mono[rotated])
+    apply (erule (1) rewrite_loop)
+  apply (intro mono_thms)
+   apply (induct xs arbitrary: n R s; clarsimp simp: return_def)
+  apply (sep_mp, clarsimp)
+  apply (clarsimp simp: bindCont_def return_def)
+  apply (rule_tac x=n in exI)
+  apply (sep_cancel)+
+  apply (clarsimp simp: sep_conj_ac)
+  apply (atomize)
+  apply (erule allE)
+  apply (erule allE)
+  apply (erule allE)
+  apply (erule mp)
+  apply (sep_cancel)+
+  apply (sep_mp)
+  apply (clarsimp simp: sep_conj_ac, sep_mp)
+  by (clarsimp)
+
+
+lemma sequenceI_rewriting'': assumes rewrite_loop: "(\<And>x R s. x \<in> list.set xs \<Longrightarrow> \<exists>n. D (h n x) \<and> (I \<and>* P x \<and>* S n \<and>* (Q x \<and>* I  \<and>* S (h n x) \<longrightarrow>* R (g x))) s \<Longrightarrow> f x R s)"
+  assumes descending: "(\<And>v xs. D (foldl h v xs) \<Longrightarrow> D v)" 
+  shows " (I  \<and>* S n \<and>* (foldr sep_conj (map P xs) sep_empty) \<and>* 
+           ( (foldr sep_conj (map Q xs) sep_empty) \<and>* I  \<and>* S (foldl h n xs) \<longrightarrow>* R (map g xs))) s \<Longrightarrow> D (foldl h n xs) \<Longrightarrow>  sequence (map f xs) R s"
+  apply (rule sequence_mono[rotated])
+    apply (erule (1) rewrite_loop)
+  apply (intro mono_thms)
+   apply (induct xs arbitrary: n R s; clarsimp simp: return_def)
+  apply (sep_mp, clarsimp)
+  apply (clarsimp simp: bindCont_def return_def)
+  apply (rule_tac x=n in exI)
+  apply (intro conjI)
+  apply (erule descending)
+  apply (sep_cancel)+
+  apply (clarsimp simp: sep_conj_ac)
+  apply (atomize)
+  apply (erule_tac x="(h n a)" in allE)
+  apply (erule_tac x="\<lambda>v. R (g a # v)" in allE)
+  apply (erule allE)
+  apply (drule mp)
+  apply (sep_cancel)+
+   apply (sep_mp)
+   apply (clarsimp simp: sep_conj_ac, sep_mp)
+  apply (assumption)
+
+  apply (drule mp)
+   apply (clarsimp)
+  apply (assumption)
+  done
+
+
+
+
+lemma helper_sequenceI: assumes descend: "\<And>a v n. D (h a v) n \<Longrightarrow> D v n" shows "D (fold h xs v) n \<Longrightarrow> D v n"
+  apply (induct xs arbitrary: n v; clarsimp)
+  apply (drule_tac x="n" in meta_spec)
+  apply (drule_tac x="(h a v)" in meta_spec)
+  apply (drule meta_mp, clarsimp)
+  by (erule descend)
+
+
+
+primrec scanl :: "('f \<Rightarrow> 'g \<Rightarrow> 'g) \<Rightarrow> 'f list \<Rightarrow> 'g \<Rightarrow> 'g list" where
+scanl_Nil:  "scanl f [] n = [n]" |
+scanl_Cons: "scanl f (x # xs) n = n # scanl f xs (f x n)"  
+
+
+
+fun pairs :: "'f list \<Rightarrow> ('f \<times> 'f) set" where
+pairs_Nil:  "pairs [] = {}" |
+pairs_Single: "pairs [x] = {}" |  
+pairs_Pair: "pairs (x#y#xs) = {(x,y)} \<union> pairs (y#xs) "   
+
+
+lemma in_pairs_iff: "(a,b) \<in> pairs xs \<longleftrightarrow> (\<exists>n. n + 1 < length xs \<and> xs ! n = a \<and> xs ! (n + 1) = b)"
+  apply (rule iffI)
+   apply (induct xs arbitrary: a b rule: pairs.induct  ; clarsimp?)
+   apply (elim disjE; clarsimp?)
+    apply (rule_tac x=0 in exI, clarsimp)
+   apply (drule meta_spec, drule meta_spec, drule meta_mp, assumption)
+   apply (clarsimp)
+   apply (meson not_less_eq nth_Cons_Suc)
+   apply (induct xs arbitrary: a b rule: pairs.induct  ; clarsimp?)
+  
+  by (metis One_nat_def diff_Suc_1' less_Suc_eq_0_disj nth_Cons')
+ 
+
+lemma pairs_sub: "pairs (xs) \<subseteq> pairs (x # xs) "
+  apply (clarsimp simp: in_pairs_iff) 
+  by fastforce
+
+lemma sequenceI_rewriting''': assumes rewrite_loop: "(\<And>x R s. x \<in> list.set xs \<Longrightarrow> \<exists>n. D (n, (h x n)) \<and> (I \<and>* P x \<and>* S n \<and>* (Q x \<and>* I  \<and>* S (h x n) \<longrightarrow>* R (g x))) s \<Longrightarrow> f x R s)"
+  shows " (I  \<and>* S n \<and>* (foldr sep_conj (map P xs) sep_empty) \<and>* 
+           ( (foldr sep_conj (map Q xs) sep_empty) \<and>* I  \<and>* S (fold h xs n) \<longrightarrow>* R (map g xs))) s \<Longrightarrow> \<forall>x\<in>(pairs (scanl h xs n)). D x \<Longrightarrow>   sequence (map f xs) R s"
+  apply (rule sequence_mono[rotated])
+    apply (erule (1) rewrite_loop)
+  apply (intro mono_thms)
+   apply (induct xs arbitrary: n R s; clarsimp simp: return_def)
+  apply (sep_mp, clarsimp)
+  apply (clarsimp simp: bindCont_def return_def)
+  apply (rule_tac x=n in exI)
+  apply (intro conjI)
+   apply (erule bspec)
+  apply (case_tac xs; clarsimp)
+
+
+  apply (sep_cancel)+
+  apply (clarsimp simp: sep_conj_ac)
+  apply (atomize)
+  apply (erule allE, erule allE, erule allE)
+  apply (drule mp)
+  defer
+   apply (drule mp)
+    defer
+    apply (assumption)
+   apply (sep_cancel)+
+   apply (sep_mp)
+  apply (clarsimp simp: sep_conj_ac, sep_mp)
+   apply (assumption)
+using pairs_sub 
+  by (metis subset_iff)
+
+definition "acc f \<equiv> \<lambda>x (i,y). (y, f x y)" 
+
+lemma acc_iff: "acc f x y = (a, b) \<longleftrightarrow> a = snd y \<and> b = f x (snd y)"
+  apply (simp add: acc_def)
+  by (intro iffI; clarsimp split: prod.splits)
+
+lemma acc_simp[simp]: "acc f x (y, z) = (z, f x z)" by (simp add: acc_def)
+
+primrec transitions where 
+"transitions f [] n = {}" | 
+"transitions f (x#xs) n = (\<lambda>((n, s), (_, s')). (n, s, s'))  ` (pairs (scanl (acc f) (x#xs) (x, n)))" 
+
+lemma scanl_0th[simp]: " scanl f xs n ! 0 =  n"
+  by (case_tac xs; clarsimp)
+
+lemma scanl_first[simp]: "xs \<noteq> [] \<Longrightarrow> scanl f xs n ! Suc 0 = f (xs ! 0) n"
+  by (case_tac xs; clarsimp)
+
+
+lemma pairs_cons[simp]: "xs \<noteq> [] \<Longrightarrow> pairs (x # xs) = {(x, xs ! 0)} \<union> pairs xs"
+  by (case_tac xs; clarsimp)
+
+
+
+lemma scanl_nonempty[simp]: "scanl f xs n \<noteq> []" by (case_tac xs; clarsimp)
+
+
+primrec trans where
+ "trans f [] n = {}" |
+ "trans f (a#xs) n = {(a, n, f a n)} \<union> trans f xs (f a n)"
+
+
+
+lemma sequenceI_rewriting4: assumes rewrite_loop: "(\<And>x R s. x \<in> list.set xs \<Longrightarrow> \<exists>n. D x n (h x n) \<and> (I \<and>* P x \<and>* S n \<and>* (Q x \<and>* I  \<and>* S (h x n) \<longrightarrow>* R (g x))) s \<Longrightarrow> f x R s)"
+  shows " (I  \<and>* S n \<and>* (foldr sep_conj (map P xs) sep_empty) \<and>* 
+           ( (foldr sep_conj (map Q xs) sep_empty) \<and>* I  \<and>* S (fold h xs n) \<longrightarrow>* R (map g xs))) s \<Longrightarrow> \<forall>(v, s, s')\<in>(trans h xs n). D v s s' \<Longrightarrow>   sequence (map f xs) R s"
+  apply (rule sequence_mono[rotated])
+    apply (erule (1) rewrite_loop)
+  apply (intro mono_thms)
+   apply (induct xs arbitrary: n R s, clarsimp simp: return_def)
+  apply (sep_mp, clarsimp)
+  apply (clarsimp simp: bindCont_def return_def)
+  apply (rule_tac x=n in exI)
+  apply (intro conjI)
+  apply (erule ballE, fastforce, fastforce)
+
+  apply (sep_cancel)+
+  apply (clarsimp simp: sep_conj_ac)
+  apply (atomize)
+  apply (erule allE, erule allE, erule allE)
+  apply (drule mp)
+  defer
+   apply (drule mp)
+    defer
+    apply (assumption)
+   apply (sep_cancel)+
+   apply (sep_mp)
+  apply (clarsimp simp: sep_conj_ac, sep_mp)
+   apply (assumption)
+  apply (blast)
+  done
+
+
+lemma lift_exE: "lift (EXS x. P x) s \<Longrightarrow> \<exists>x. (lift (P x)) s "
+  apply (clarsimp simp: lift_def)
+  apply (blast)
+  done
 
 end
 end

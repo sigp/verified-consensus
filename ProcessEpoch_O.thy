@@ -50,7 +50,13 @@ record EffectiveBalancesContext =
 type_synonym ('e, 'addr) ref = "((BeaconState \<times> ('addr \<Rightarrow> 'addr heap_value option)), 'e option) lens"
 
 
-locale extended_vc = verified_con  + 
+
+definition "exit_epoch :: (Validator, Epoch) lens \<equiv> Lens exit_epoch_f (\<lambda>v e. v\<lparr>exit_epoch_f := e\<rparr>) (\<lambda>_. True)"
+definition "withdrawable_epoch :: (Validator, Epoch) lens \<equiv> Lens withdrawable_epoch_f (\<lambda>v e. v\<lparr>withdrawable_epoch_f := e\<rparr>) (\<lambda>_. True)"
+
+definition "activation_epoch :: (Validator, Epoch) lens \<equiv>
+             Lens activation_epoch_f (\<lambda>v e. v\<lparr>activation_epoch_f := e\<rparr>) (\<lambda>_. True)"
+locale extended_vc = verified_con  + hoare_logic +
   fixes "progressive_balances_cache" :: "(ProgressiveBalancesCache, 'b) ref" 
   fixes "activation_queue" :: "(ActivationQueue, 'b) ref" 
   fixes "state_context" :: "(StateContext, 'b) ref"
@@ -90,7 +96,6 @@ lemma point_of_singleton [simp]: "point_of (singleton_p f) = f"
 
 term "(\<lambda>s. grab {(l, s').  ((maps_to l v -* eq (singleton_p (K s)))) s'}) "
 
-definition "alloc v f = (\<Sqinter>R. \<Squnion>l. assert (Collect (lift (maps_to l v \<longrightarrow>* R l))); spec (UNIV \<times> Collect (lift (R l))); f l)" 
 
 end
 
@@ -216,14 +221,14 @@ def record_validator_exit(exit_cache: ExitCache, exit_epoch: Epoch):
 \<close>
 
 definition record_validator_exit :: "(ExitCache, 'b) ref \<Rightarrow> Epoch \<Rightarrow> (unit, 'a) cont"
-  where "record_validator_exit ec exit_epoch \<equiv> do {
+  where "record_validator_exit ec ee \<equiv> do {
    cache <- exit_epoch_counts_f <$> read ec;
-   if exit_epoch \<in> dom cache then do {
-        x <- the (cache exit_epoch) .+ 1;
-        let cache = cache(exit_epoch \<mapsto> x);
+   if ee \<in> dom cache then do {
+        x <- the (cache ee) .+ 1;
+        let cache = cache(ee \<mapsto> x);
         ec := return (ec\<lparr> exit_epoch_counts_f := cache \<rparr>)
    } else do {
-     let cache = cache(exit_epoch \<mapsto> 1);
+     let cache = cache(ee \<mapsto> 1);
      ec := return (ec\<lparr>exit_epoch_counts_f := cache \<rparr>)
    }
 }"
@@ -253,10 +258,7 @@ definition get_exit_queue_churn :: "ExitCache \<Rightarrow> Epoch \<Rightarrow> 
 
 notation liftM (infixl "<$>" 50)
 
-definition "exit_epoch :: (Validator, Epoch) lens \<equiv> Lens exit_epoch_f (\<lambda>v e. v\<lparr>exit_epoch_f := e\<rparr>) (\<lambda>_. True)"
-definition "withdrawable_epoch :: (Validator, Epoch) lens \<equiv> Lens withdrawable_epoch_f (\<lambda>v e. v\<lparr>withdrawable_epoch_f := e\<rparr>) (\<lambda>_. True)"
 
-abbreviation (input) "mut x \<equiv> x" 
 
 definition initiate_validator_exit_fast :: "(Validator, 'b) ref \<Rightarrow> (ExitCache, 'b) ref \<Rightarrow> StateContext \<Rightarrow> (unit, 'a) cont"
   where "initiate_validator_exit_fast validator ec state_ctxt = do{
@@ -793,20 +795,10 @@ text \<open># Set total active balance to 0, it will be updated in
         current_epoch_flag_attesting_balances=current_epoch_flag_attesting_balances,
     )\<close>
 
-definition "activation_epoch :: (Validator, Epoch) lens \<equiv>
-             Lens activation_epoch_f (\<lambda>v e. v\<lparr>activation_epoch_f := e\<rparr>) (\<lambda>_. True)"
 
 
 
-definition "v_list_lens i \<equiv> 
-            (Lens (\<lambda>l. if u64_to_nat i < length (var_list_inner l) \<and> length (var_list_inner l) < 2 ^ 64  then Some (var_list_inner l ! u64_to_nat i) else None) 
-            (\<lambda>l e. case e of (Some e) \<Rightarrow> VariableList (list_update (var_list_inner l) (u64_to_nat i) e) | _ \<Rightarrow> l) (\<lambda>_. True))"
 
-definition "var_list_index_lens ls i \<equiv> do {
-  l <- read (v_list_lens i |oo> ls);
-  return (v_list_lens i |oo> ls) }"
-
-notation "var_list_index_lens" (infixr "!?"  88)
 
 definition process_single_registry_update :: "(Validator, 'b) ref \<Rightarrow> ValidatorInfo \<Rightarrow> ExitCache \<Rightarrow>
                                                u64 list \<Rightarrow> (ActivationQueue, 'b) ref \<Rightarrow> StateContext \<Rightarrow> (unit, 'a) cont"
@@ -961,8 +953,6 @@ adhoc_overloading
   unsigned_add ref_unsigned_add ref_unsigned_add_l ref_unsigned_add_r
 
 
-definition "free l f = (\<Sqinter>R. \<lbrace>Collect \<lless>(EXS v. l \<mapsto>\<^sub>l v) \<and>* R \<then>\<rbrace> ; \<lparr>UNIV \<times> Collect \<lless>R \<then>\<rparr> ; f ())"
-find_theorems alloc
 definition process_single_reward_and_penalty :: 
   "u64 \<Rightarrow> u64 \<Rightarrow> ValidatorInfo \<Rightarrow> RewardsAndPenaltiesContext \<Rightarrow> StateContext \<Rightarrow> (u64, 'a) cont"
   where "process_single_reward_and_penalty balance inactivity_score 

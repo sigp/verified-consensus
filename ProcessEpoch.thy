@@ -1,9 +1,11 @@
 theory ProcessEpoch                                
-  imports Types Invariants Helpers Main "HOL-Library.Monad_Syntax"
+  imports Types Invariants Helpers Main "HOL-Library.Monad_Syntax" Hoare_Logic
 begin
 
-context verified_con
+context hoare_logic
 begin
+
+
 
 definition set_justified_checkpoint :: "Checkpoint \<Rightarrow> (unit, 'a) cont"
   where "set_justified_checkpoint n \<equiv> (current_justified_checkpoint ::= n)"
@@ -73,7 +75,51 @@ where
   }"
 
 
+definition get_flag_index_deltas ::
+  "nat \<Rightarrow> ((u64 list \<times> u64 list), 'a) cont"
+where
+  "get_flag_index_deltas flag_index \<equiv> do {
+    v <- read validators;
+    rewards <- alloc (VariableList [0. _ \<leftarrow> [0..<length (var_list_inner v)]] :: u64 VariableList);
+    penalties <- alloc (VariableList [0. _ \<leftarrow> [0..<length (var_list_inner v)]] :: u64 VariableList);
+    previous_epoch <- get_previous_epoch;
+    unslashed_participating_indices \<leftarrow> get_unslashed_participating_indices flag_index previous_epoch;
+    let weight = PARTICIPATION_FLAG_WEIGHTS ! flag_index;
+    unslashed_participating_balance \<leftarrow> get_total_balance unslashed_participating_indices;
+    unslashed_participating_increment \<leftarrow> unslashed_participating_balance \\
+                                            EFFECTIVE_BALANCE_INCREMENT config;
+    total_active_balance \<leftarrow> get_total_active_balance ;
+    active_increments \<leftarrow> total_active_balance \\ EFFECTIVE_BALANCE_INCREMENT config;
+    eligible_validator_indices \<leftarrow> get_eligible_validator_indices;
+    _ <- mapM (\<lambda>index. do {
+      reward  <- mut (var_list_index_lens rewards index);
+      penalty <- mut (var_list_index_lens penalties index);
+      base_reward \<leftarrow> get_base_reward index;
+      in_inactivity_leak \<leftarrow> is_in_inactivity_leak;
+      if index \<in> unslashed_participating_indices then (
+        if \<not> in_inactivity_leak then do {
+          reward_numerator_pre \<leftarrow> base_reward .* weight;
+          reward_numerator \<leftarrow> reward_numerator_pre .* unslashed_participating_increment;
+          reward_denominator \<leftarrow> active_increments .* WEIGHT_DENOMINATOR;
+          reward' \<leftarrow> reward_numerator \\ reward_denominator;
+          (reward := reward .+ reward')
+        } else (return ())
 
+      ) else if flag_index \<noteq> TIMELY_HEAD_FLAG_INDEX then do {
+        penalty_pre \<leftarrow> base_reward .* weight;
+        penalty' \<leftarrow> penalty_pre \\ WEIGHT_DENOMINATOR;
+        (penalty := penalty .+ penalty')
+      } else 
+         return ()
+    })  eligible_validator_indices;
+    final_penalties <- var_list_inner <$> read penalties;
+    final_rewards   <- var_list_inner <$> read rewards;
+    _ <- free rewards;
+    _ <- free penalties;
+    return ( final_rewards, final_penalties)
+  }"
+
+(*
 definition get_flag_index_deltas ::
   "nat \<Rightarrow> ((u64 list \<times> u64 list), 'a) cont"
 where
@@ -115,8 +161,44 @@ where
       } else (return (rewards, penalties))
     })  eligible_validator_indices (init_rewards, init_penalties)
   }"
+*)
+
 
 definition get_inactivity_penalty_deltas ::
+  "(u64 list \<times> u64 list, 'a) cont"
+where
+  "get_inactivity_penalty_deltas \<equiv> do {
+    v <- read validators;
+    rewards <- alloc (VariableList [0. _ \<leftarrow> [0..<length (var_list_inner v)]] :: u64 VariableList);
+    penalties <- alloc (VariableList [0. _ \<leftarrow> [0..<length (var_list_inner v)]] :: u64 VariableList);
+    previous_epoch <- get_previous_epoch;
+    matching_target_indices \<leftarrow> get_unslashed_participating_indices TIMELY_TARGET_FLAG_INDEX
+                                                                   previous_epoch;
+    eligible_validator_indices \<leftarrow> get_eligible_validator_indices;
+    vs <- read validators;
+    scores <- read inactivity_scores; 
+    _ <- (mapM (\<lambda>index. do {
+      reward  <- mut (var_list_index_lens rewards index);
+      penalty <- mut (var_list_index_lens penalties index);
+      let index_nat = u64_to_nat index;
+      if index \<notin> matching_target_indices then do {
+        validator \<leftarrow>  (var_list_index vs index);
+        inactivity_score \<leftarrow>  (var_list_index scores index);
+        penalty_numerator \<leftarrow> Validator.effective_balance_f validator .* inactivity_score;
+        penalty_denominator \<leftarrow> INACTIVITY_SCORE_BIAS config .* INACTIVITY_PENALTY_QUOTIENT_ALTAIR;
+        new_penalty \<leftarrow> penalty_numerator \\ penalty_denominator;
+        _ <- (penalty := penalty .+ (new_penalty :: u64));
+        return ()}
+      else
+        return ()}) eligible_validator_indices);
+    final_penalties <- var_list_inner <$> read penalties;
+    final_rewards   <- var_list_inner <$> read rewards;
+    _ <- free rewards;
+    _ <- free penalties;
+    return (final_rewards, final_penalties)
+  }"
+
+(* definition get_inactivity_penalty_deltas ::
   "(u64 list \<times> u64 list, 'a) cont"
 where
   "get_inactivity_penalty_deltas \<equiv> do {
@@ -145,6 +227,7 @@ where
         return (rewards, penalties)}) eligible_validator_indices (init_rewards, init_penalties);
     return (final_rewards, final_penalties)
   }"
+*)
 
 definition increase_balance ::
   "u64 \<Rightarrow> u64 \<Rightarrow> (unit, 'a) cont"
@@ -405,19 +488,19 @@ definition is_eligible_for_activation :: "Validator \<Rightarrow> (bool, 'a) con
                  activation_epoch_f validator = FAR_FUTURE_EPOCH) 
 }"
 
-primrec filterM :: "('b \<Rightarrow> (bool, 'r) cont) \<Rightarrow> 'b list \<Rightarrow> ('b list, 'r) cont" where
+primrec filterM :: "('e \<Rightarrow> (bool, 'r) cont) \<Rightarrow> 'e list \<Rightarrow> ('e list, 'r) cont" where
   "filterM f (x#xs) = bindCont (f x) (\<lambda>b. do { xs <- filterM f xs; (if b then return (x # xs) else return xs)}) " |
   "filterM f [] = return []"
 
-fun sortedByM :: "('b \<Rightarrow> 'b \<Rightarrow> (bool, 'a) cont) \<Rightarrow> 'b list \<Rightarrow> (bool, 'a) cont" where
+fun sortedByM :: "('e \<Rightarrow> 'e \<Rightarrow> (bool, 'a) cont) \<Rightarrow> 'e list \<Rightarrow> (bool, 'a) cont" where
   "sortedByM f (x#y#xs) = do {b <- f x y; b' <- sortedByM f (y#xs); return (b \<and> b')}" |
   "sortedByM f ([x]) = return True" |
   "sortedByM f ([]) = return True"
 
 
-definition sortBy :: "('b \<Rightarrow> 'b \<Rightarrow> (bool, 'a) cont) \<Rightarrow> 'b list \<Rightarrow> ('b list, 'a) cont" where
+definition sortBy :: "('e \<Rightarrow> 'e \<Rightarrow> (bool, 'a) cont) \<Rightarrow> 'e list \<Rightarrow> ('e list, 'a) cont" where
   "sortBy P xs \<equiv> do {
-    ys \<leftarrow> select {ys. List.set ys = List.set xs};
+    ys \<leftarrow> select {ys. List.set ys = List.set xs \<and> length xs = length ys};
     sorted \<leftarrow> sortedByM P ys;
     if sorted then return ys else todo
 }"
@@ -427,6 +510,45 @@ abbreviation (input) lex_ord where
 
 (* Hard to write this without mutating while iterating without substantially diverging from
    the spec, as initiate_validator_exit does a whole bunch of reads & writes *)
+
+definition process_registry_updates ::
+  "(unit, 'a) cont"
+where
+  "process_registry_updates \<equiv> do {
+    vals \<leftarrow> read validators;
+    _ \<leftarrow> forM (enumerate (var_list_inner vals))
+      ((\<lambda>(index, val). do {
+        current_epoch \<leftarrow> get_current_epoch;
+        val \<leftarrow> (if is_eligible_for_activation_queue val then do {
+                      x \<leftarrow> current_epoch .+ Epoch 1;
+                      return (val\<lparr>activation_eligibility_epoch_f := x\<rparr>)}
+                 else return val);
+        _ \<leftarrow> update_validator val index;           
+        _ \<leftarrow> when (is_active_validator val current_epoch \<and>
+                Validator.effective_balance_f val \<le> EJECTION_BALANCE config) 
+               (initiate_validator_exit index);
+          return ()
+    }));
+    vals \<leftarrow> read validators;
+    potential_activation_queue \<leftarrow> filterM (\<lambda>(index,val). is_eligible_for_activation val) 
+                                           (enumerate (var_list_inner vals));
+    let activation_queue = map fst potential_activation_queue;  
+    activation_queue \<leftarrow> sortBy (\<lambda>index index'. do {
+                                vals \<leftarrow> read validators;
+                                val  \<leftarrow> var_list_index vals index;
+                                val' \<leftarrow> var_list_index vals index';
+                                let epoch  = activation_eligibility_epoch_f val;
+                                let epoch' = activation_eligibility_epoch_f val';   
+                                return (lex_ord ( epoch, index)  ( epoch', index'))}) activation_queue;
+  churn_limit \<leftarrow> get_validator_churn_limit;
+  _ <- forM (take (u64_to_nat churn_limit) activation_queue) (\<lambda>index. do {
+       val  \<leftarrow> mut (validators !? index);
+       current_epoch \<leftarrow> get_current_epoch;
+       active_epoch \<leftarrow> compute_activation_exit_epoch current_epoch;
+       (val := return (val\<lparr>activation_epoch_f := active_epoch\<rparr>))  
+    });
+   return ()
+  }"
 definition process_registry_updates ::
   "(unit, 'a) cont"
 where
