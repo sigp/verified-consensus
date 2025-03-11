@@ -549,6 +549,7 @@ where
     });
    return ()
   }"
+(*
 definition process_registry_updates ::
   "(unit, 'a) cont"
 where
@@ -588,6 +589,7 @@ where
     });
     write_to validators ( vals)
   }"
+*)
 
 definition process_historical_summaries_update :: "(unit, 'a) cont" where
   "process_historical_summaries_update \<equiv> do {
