@@ -13,36 +13,34 @@ At the high level, we achieved the following
 - Developed a verification framework in Isabelle/HOL that allowed the representation of Ethereum specifications in Separation Logic and Concurrent Refinement Algebra
 - Translated a large portion of the python 'abstract spec' for Ethereum Epoch Processing into the Isabelle/HOL theorem prover.
 - Translated the optimisations described in the project outline into Isabelle/HOL.
-- Provided high-level abstract specifications for the python spec in terms of Separation Logic Hoare Triples
+- Provided high-level abstract specifications for the python spec in terms of Separation Logic Hoare Triples.
 - Provided high-level abstract specifications for the optimised implementation in terms of Separation Logic Hoare Triples.
 
-Additional outcomes not in-scope for the project goals include the development of a generic separation algebra for all data structures and a reasonable upper bound on the safety 
-properties required for avoiding integer overflow and/or other numeric errors for epoch processing, as well as bounds on the range of configuration values that will avoid faults. 
+Additional outcomes not in-scope for the project goals include the development of a generic separation algebra for all data structures and a reasonable upper bound on the safety properties required for avoiding integer overflow and/or other numeric errors for epoch processing, as well as bounds on the range of configuration values that will avoid faults.
 
-
-We go into a bit more detail of each outcome below:
+We go into a bit more detail of each outcome below.
 
 ## The framework
 
 In this project we developed a novel framework for representing abstract specifications in the Isabelle/HOL theorem prover. We shallowly-embed programs as 
 monadic functions returning continuations in the CRA (concurrent refinement algebra) abstract type. That is, each program is automatically a specification of its own behaviour.  
 This allows a high level of modularity - the monadic representation should be readable to any Haskell or Rust programmer (with some added sugar for mutation), while abstracting over the underlying representation in the refinement algebra.
- In turn, the algebra abstracts over the concrete comptuational model. 
+ In turn, the algebra abstracts over the concrete comptuational model.
 
-For example, we abstract over the python sorting algorithm used in the specification through the non-determinism given by the algebra. Likewise, we abstract over allocation and deallocation of variables, 
+For example, we abstract over the python sorting algorithm used in the specification through the non-determinism given by the algebra. Likewise, we abstract over allocation and deallocation of variables,
 though this could be adjusted for a memory-constrained context easily. 
 
 The goal was that someone relatively unfamiliar with formal verification could read and write programs, and that we could freely change the underlying semantics of the syntax as needed. Similar to e.g. Dafny, the programmer can add in a contract in the form of pre- or post-conditions as part of the program definition, or specified independently as required. Due to our layers of abstraction, extending the translated specifications to a concurrent or parallel setting
-would be relatively trivial in our framework.  We were also able to use existing Isabelle/HOL libraries, such as the machine-word formalisation. This gives a high level of assurance that we are capturing as much of the details of real code as is reasonable. 
+would be relatively trivial in our framework.  We were also able to use existing Isabelle/HOL libraries, such as the machine-word formalisation. This gives a high level of assurance that we are capturing as much of the details of real code as is reasonable.
 
 ## The translation
 
-Using said framework, we translated all affected portions of the python abstract spec into our framework as well as the optimised implementation, which we believe we were able to do with a high degree of faithfulness to the python representation. 
-The main difference is in the representation of loops, where we favour functional-style maps and folds over the imperative for/while. 
+Using said framework, we translated all affected portions of the python abstract spec into our framework as well as the optimised implementation, which we believe we were able to do with a high degree of faithfulness to the python representation.
+The main difference is in the representation of loops, where we favour functional-style maps and folds over the imperative for/while.
 
 We have the following as an example:
 
-```
+```python
  def get_inactivity_penalty_deltas(state: BeaconState) -> Tuple[Sequence[Gwei], Sequence[Gwei]]:
     """
     Return the inactivity penalty deltas by considering timely target participation flags and inactivity scores.
@@ -61,7 +59,7 @@ We have the following as an example:
 
 and in Isabelle
 
-```
+```isabelle
 "definition get_inactivity_penalty_deltas ::
   "(u64 list × u64 list, 'a) cont"
 where
@@ -106,7 +104,7 @@ end-to-end specifications in the form of Hoare Triples, {pre} program {post}, in
 
 For example, we have 
 
-```
+```isabelle
 { λs. length vs < 2^64 ∧ 
       length is = length vs ∧
       safe_mul INACTIVITY_PENALTY_QUOTIENT_ALTAIR (INACTIVITY_SCORE_BIAS config) ∧ 
@@ -125,7 +123,7 @@ For example, we have
 { P }
 ```
 
-for get_inactivity_penalty_deltas. The specification has a pure component, denoting the safety requirements for the command, and a spatial component in separation logic. The (*) syntax refers to separating conjunction, for the purposes of this report it simply means that we have a local specification, that can be used in a wider context.
+for `get_inactivity_penalty_deltas`. The specification has a pure component, denoting the safety requirements for the command, and a spatial component in separation logic. The (*) syntax refers to separating conjunction, for the purposes of this report it simply means that we have a local specification, that can be used in a wider context.
 
 All affected components were given Hoare Triples of this form, verifying that they match the specifications required for the paper proof, both in terms of the behaviour of the components given by the Hoare Triples
  and the independence of the passes given by the separation logic.
