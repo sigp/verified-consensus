@@ -15,8 +15,23 @@ researchers, and mirrors the spec by implementing the algorithm in Python.
 
 We are now in the process of formalising the proofs in Isabelle/HOL:
 
-- [`algebra`](./algebra): Separation logic algebra which is the base layer for the proofs.
+- [`Word_Lib`](./Word_Lib): Library for machine words. 
+- [`algebra`](./algebra): Rely-guarantee algebra and trace model instantantiation, the former gives the semantic meaning to our verification and the latter is simply a instance for consistency checking.
+- [`jormungand`)(./jormungand): Separation Logic algebra and mechanisation, including proof tactics. Adapted from previous work by the authors.
+- [`Cont_Monad_Algebra.thy`](./Cont_Monad_Algebra.thy): Formalisation of the continuation monad with some added syntactic sugar for imperative state updates.
+- [`Lens.thy`])(./Lens.thy): Formalisation of lenses, used for representation of the state and abstract model for separation algebra.
+- [`Fun_Algebra.thy`](./Fun_Algebra.thy): Generic separation algebra based on pointed sets of endofunctions. 
+- [`Sep_Logic_Incomplete.thy`](./Sep_Logic_Incomplete.thy): Contains as assumptions aspects of the formalisation due to be mechanised fully at a later date. 
+- [`Hoare_Logic.thy`](./Hoare_Logic.thy): Formalisation of Hoare Logic as inequalities in the rely-guarantee algebra.
+- [`Hoare_VCG.thy`](./Hoare_VCG.thy): Hoare triples for generic program constructs. 
+- [`Types.thy`](./Types.thy): Choice of representation types for the Python spec.
+- [`Unsigned.thy`](./Unsigned.thy): Formalisation of all unsigned operations on machine words/epochs etc. 
+- [`Config.thy`](./Config.thy): Abstract model of all possible configuration options for Epoch Processing
+- [`VerifiedConsensus.thy`](./VerifiedConsensus.thy): Brings together the formalisation of python with our algebra. 
+- [`sqrt_proof.thy`](./sqrt_proof.thy): Proof of correctness of the integer square root algorithm used in the Python spec.
 - [`ProcessEpoch.thy`](./ProcessEpoch.thy): Translation of the Python spec to our continuation monad.
+- [`ProcessEpoch_O.thy`](./ProcessEpoch_O.thy): Translation of the optimised spec to our continuation monad.
+- [`Process_Epoch_O_Specs.thy`](./Process_Epoch_O_Specs.thy): Proofs of functional correctness of the python and optimised specifications
 
 ## Call DB
 
@@ -38,6 +53,9 @@ processing.
 - Michael Sproul ([@michaelsproul][]), Sigma Prime
 
 We are grateful to the Ethereum Foundation for a grant supporting this work.
+
+
+
 
 [@onomatic]: https://github.com/onomatic
 [@michaelsproul]: https://github.com/michaelsproul
