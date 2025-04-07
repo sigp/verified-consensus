@@ -17,9 +17,9 @@ We are now in the process of formalising the proofs in Isabelle/HOL:
 
 - [`Word_Lib`](./Word_Lib): Library for machine words. 
 - [`algebra`](./algebra): Rely-guarantee algebra and trace model instantantiation, the former gives the semantic meaning to our verification and the latter is simply a instance for consistency checking.
-- [`jormungand`)(./jormungand): Separation Logic algebra and mechanisation, including proof tactics. Adapted from previous work by the authors.
+- [`jormungand`](./jormungand): Separation Logic algebra and mechanisation, including proof tactics. Adapted from previous work by the authors.
 - [`Cont_Monad_Algebra.thy`](./Cont_Monad_Algebra.thy): Formalisation of the continuation monad with some added syntactic sugar for imperative state updates.
-- [`Lens.thy`])(./Lens.thy): Formalisation of lenses, used for representation of the state and abstract model for separation algebra.
+- [`Lens.thy`](./Lens.thy): Formalisation of lenses, used for representation of the state and abstract model for separation algebra.
 - [`Fun_Algebra.thy`](./Fun_Algebra.thy): Generic separation algebra based on pointed sets of endofunctions. 
 - [`Sep_Logic_Incomplete.thy`](./Sep_Logic_Incomplete.thy): Contains as assumptions aspects of the formalisation due to be mechanised fully at a later date. 
 - [`Hoare_Logic.thy`](./Hoare_Logic.thy): Formalisation of Hoare Logic as inequalities in the rely-guarantee algebra.
