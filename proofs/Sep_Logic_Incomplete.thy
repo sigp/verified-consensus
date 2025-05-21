@@ -11,11 +11,7 @@ lemma "valid_lens ref \<Longrightarrow> valid_lens l \<Longrightarrow>set (lens_
   done
 
 lemma valid_lens_ocomp: "valid_lens ref \<Longrightarrow> valid_lens l \<Longrightarrow> valid_lens (lens_ocomp l ref)" sorry
-  apply (clarsimp simp: lens_ocomp_def)
-  apply (case_tac "get ref s"; clarsimp)
-   apply (metis set_get_def valid_lens_def)
-  apply (metis set_get_def valid_lens_def)
-  done
+
 
 definition "lens_pset_fix l ref v \<equiv> Abs_p_set (Pair ({f. (\<exists>v. (\<lambda>s. case (get (lens_ocomp l ref) s) of (Some x) \<Rightarrow> (set (lens_ocomp l ref) (set ref s (Some v))) (Some x) |
                                                                     None \<Rightarrow> set ref s (Some v) )  = f)  } \<union> {id})
@@ -114,34 +110,7 @@ lemma split_validator:  "(vref \<mapsto>\<^sub>l v) s \<Longrightarrow>
                             (lens_ocomp exit_epoch vref \<mapsto>\<^sub>l (get exit_epoch v) \<and>* lens_ocomp withdrawable_epoch vref \<mapsto>\<^sub>l (get withdrawable_epoch v) \<and>* lens_ocomp activation_epoch vref \<mapsto>\<^sub>l (get activation_epoch v) \<and>*
                             (ALLS x y z. lens_ocomp exit_epoch vref \<mapsto>\<^sub>l x \<longrightarrow>* lens_ocomp withdrawable_epoch vref \<mapsto>\<^sub>l y  \<longrightarrow>* lens_ocomp activation_epoch vref \<mapsto>\<^sub>l z \<longrightarrow>* 
                                 vref \<mapsto>\<^sub>l v\<lparr>exit_epoch_f := x, withdrawable_epoch_f := y, activation_epoch_f := z\<rparr>)) s" sorry
-  apply (clarsimp simp: sep_conj_def maps_to_def)
-  apply (intro conjI)
-   apply (simp add: valid_lens_ocomp)
-  apply (subgoal_tac "valid_lens (lcomp l ref)")
-   apply (rule_tac x="lens_pset_option (lens_ocomp l ref) (get l v)" in exI)
-   apply (rule_tac x="lens_pset_fix l ref v" in exI)
-   apply (intro conjI)
-       apply (clarsimp simp: sep_disj_p_set_def)
-       apply (clarsimp simp: disj_cylindric_set_def)
-       apply (clarsimp simp: set_of_lens_pset_option set_of_lens_pset_fix)
-       apply (elim disjE; clarsimp)
-       apply (intro ext; clarsimp split: option.splits)
-       apply (intro conjI impI; clarsimp?)
-        apply (clarsimp simp: lens_ocomp_def)
-       apply (clarsimp simp: lens_ocomp_def)
-      apply (rule p_set_eqI)
-       apply (clarsimp simp: set_of_plus_domain_iff)
-       apply (intro set_eqI iffI; clarsimp?)
-        apply (elim disjE; clarsimp)
-  apply (clarsimp simp: Bex_def)
-       apply (clarsimp simp: set_of_lens_pset_option set_of_lens_pset_fix)
-         apply (rule_tac x=id in exI; clarsimp)
-        apply (case_tac va; clarsimp)
-         apply (rule_tac x="(\<lambda>s. set (lcomp l ref) s None)" in bexI)
-          apply (rule_tac x=id in bexI; clarsimp?)
-          apply (intro ext; clarsimp simp: lens_ocomp_def)
-       apply (clarsimp simp: set_of_lens_pset_option set_of_lens_pset_fix)
-  sorry
+
 
 lemma slashings_wf: "(slashings \<mapsto>\<^sub>l ss \<and>* R) s \<Longrightarrow> 
 sum_list (map unat (vector_inner ss)) \<le> 2 ^ 64 - 1 \<and> 
@@ -165,17 +134,6 @@ lemma restore_variablelist: "foldr (\<and>*) (map (\<lambda>x. lens_oocomp (v_li
 
 lemma restore_variablelist': "foldr (\<and>*) (map (\<lambda>x. lcomp (v_list_lens (fst x)) ll \<mapsto>\<^sub>l f x) (enumerate xs)) sep_empty = 
        (ll \<mapsto>\<^sub>l VariableList (map f (enumerate xs))) "
-  apply (induct xs arbitrary: ll; clarsimp?)
-   defer
-   apply (subst enumerate_simp)
-     apply (clarsimp)
-    defer
-    apply (clarsimp)
-    apply (intro conjI impI)
-   apply (subst enumerate_simp)
-     apply (clarsimp)
-      defer
-  apply (clarsimp)
   sorry
 
 lemma split_var_list: 

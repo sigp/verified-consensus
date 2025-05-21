@@ -1,5 +1,5 @@
 theory Lens
-imports Main  "HOL-Library.Adhoc_Overloading"
+imports Main 
 
 begin
 
@@ -33,5 +33,5 @@ definition lens_oocomp :: "('b, 'a option) lens \<Rightarrow> ('c, 'b option) le
 "lens_oocomp l l' \<equiv> Lens (\<lambda>s. Option.bind (get l' s) (get l)  ) (\<lambda>s a. set l' s (Option.bind (get l' s) (\<lambda>s'. Some (set l s' a) )) ) (\<lambda>_. True) "
 
 adhoc_overloading
-  lcomp lens_comp lens_ocomp lens_oocomp
+  lcomp == lens_comp lens_ocomp lens_oocomp
 end

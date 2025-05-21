@@ -220,10 +220,10 @@ lemma square_less_than: "x \<le> x + n div x \<Longrightarrow> (x + n div x) div
 
 
 lemma square_less_than_by_1: "x \<le> x + n div x \<Longrightarrow> n \<noteq> 0 \<Longrightarrow> ((x + n div x) div 2) - 1 = x \<Longrightarrow> x * x \<le> (n :: u64)"
-  by (smt (verit, ccfv_threshold) add_diff_cancel_left'
-          diff_numeral_special(9) div_by_0_word div_lt' div_to_mult_word_lt 
-          less_1_simp linorder_not_le mult_2_right one_add_one unat_mult_lem 
-           unat_plus_simple unsigned_1 word_diff_ls'(3) word_le_less_eq word_less_div)
+  by (smt (verit, best) Groups.mult_ac(2) Rings.ring_distribs(2) add_diff_cancel_left' add_diff_eq 
+          arith_special(3) diff_add_cancel distrib_left div_by_0 div_lt' div_to_mult_word_lt inc_le less_le linorder_not_le
+          mult_1_right mult_1s(1) mult_zero_right numeral_One order_le_less_trans unsigned_0 unsigned_1 
+           word_coorder.extremum word_eq_unatI word_le_less_eq word_mult_le_mono1 word_overflow word_plus_mcs_4')
   
 
 

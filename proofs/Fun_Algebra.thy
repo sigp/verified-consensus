@@ -1,6 +1,6 @@
 theory Fun_Algebra imports
-  "jormungand/sep_algebra/Sep_Tactics"
-  "jormungand/Hoare_Sep_Tactics/Extended_Separation_Algebra"
+  "Verified_Consensus.Sep_Tactics"
+  "Verified_Consensus.Extended_Separation_Algebra"
   Lens
 begin
 

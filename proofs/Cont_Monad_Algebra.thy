@@ -1,5 +1,5 @@
 theory Cont_Monad_Algebra
- imports "algebra/rg-algebra/AbstractAtomicTest/Constrained_Atomic_Commands" "HOL-Library.Monad_Syntax"
+ imports "Verified_Consensus.Constrained_Atomic_Commands" "HOL-Library.Monad_Syntax"
 begin         
 
 
@@ -26,7 +26,7 @@ definition foldrM :: "('a \<Rightarrow> 'b \<Rightarrow> ('b, 'r) cont) \<Righta
   "foldrM f xs = foldr (k_comp) (map f xs) (return)"
 
 
-adhoc_overloading bind bindCont
+adhoc_overloading bind == bindCont
 
 
 primrec mapM :: "('a \<Rightarrow> ('b, 'r) cont) \<Rightarrow> 'a list \<Rightarrow> ('b list, 'r) cont" where

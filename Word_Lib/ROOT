@@ -5,7 +5,7 @@ session Word_Lib = HOL +
   sessions
     "HOL-Library"
     "HOL-Eisbach"
-  theories [document = false] \<comment> \<open>Attempt to just generated word-specific document material\<close>
+  theories [document = false] \<comment> \<open>Attempt to just generate word-specific document material\<close>
     Enumeration
     Even_More_List
     Legacy_Aliases
@@ -15,8 +15,8 @@ session Word_Lib = HOL +
     More_Sublist
     Strict_part_mono
   theories
-    Bits_Int
     Bit_Comprehension
+    More_Int
     More_Word
     Bit_Shifts_Infix_Syntax
     Next_and_Prev
@@ -25,6 +25,7 @@ session Word_Lib = HOL +
     Many_More
     Singleton_Bit_Shifts
     Typedef_Morphisms
+    Bin_sign
   theories
     Bitwise
     Guide

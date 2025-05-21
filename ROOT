@@ -10,3 +10,6 @@ session Verified_Consensus = Word_Lib +
   theories
     "algebra/rg-algebra/AbstractAtomicTest/Idle"
     "jormungand/Hoare_Sep_Tactics/Extended_Separation_Algebra"
+
+
+

@@ -1,0 +1,4 @@
+session Verified_Consensus_Proofs = Verified_Consensus +
+  options [document = false, quick_and_dirty]
+  theories
+    "proofs/Process_Epoch_O_Specs"

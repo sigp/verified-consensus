@@ -1,6 +1,6 @@
 (* Definition of the `verified_con` locale which is used in the rest of the project *)
 theory VerifiedConsensus
-  imports "algebra/rg-algebra/AbstractAtomicTest/Idle" 
+  imports "Verified_Consensus.Idle" 
            Cont_Monad_Algebra 
            Types Config 
           "Word_Lib.Word_64" 
@@ -112,7 +112,7 @@ abbreviation modify :: "'a \<Rightarrow> ('b \<Rightarrow> 'b) \<Rightarrow> (un
 abbreviation modifyM :: "'a \<Rightarrow> ('b \<Rightarrow> ('b, 'c) cont) \<Rightarrow> (unit, 'c) cont" where
    "modifyM a f \<equiv> (bindCont (read a) (\<lambda>x. bindCont (f x) (write_to a)))"
 
-adhoc_overloading modify_s modify modifyM
+adhoc_overloading modify_s == modify modifyM
 
 abbreviation 
   "when b p \<equiv> (if b then p else return ())" 
@@ -296,13 +296,13 @@ abbreviation (input) "mut x \<equiv> x"
 
 
 adhoc_overloading
-  read read_beacon read_list read_u64 read_u8
+  read == read_beacon read_list read_u64 read_u8
 
 adhoc_overloading
- index_s index_u8_from_list index_u64_from_list index_ptr_from_list
+ index_s == index_u8_from_list index_u64_from_list index_ptr_from_list
 
 adhoc_overloading
-  write_to write_beacon write_list write_u8 write_u64
+  write_to == write_beacon write_list write_u8 write_u64
 
 end
 

@@ -128,7 +128,7 @@ definition epoch_unsigned_add :: "Epoch \<Rightarrow> Epoch \<Rightarrow> (Epoch
   }"
 
 adhoc_overloading
-  unsigned_add word_unsigned_add slot_unsigned_add epoch_unsigned_add
+  unsigned_add == word_unsigned_add slot_unsigned_add epoch_unsigned_add
 
 notation
   unsigned_add (infixl ".+" 65) and
@@ -153,7 +153,7 @@ definition slot_unsigned_mul :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a
   }"
 
 adhoc_overloading
-  unsigned_mul word_unsigned_mul slot_unsigned_mul
+  unsigned_mul == word_unsigned_mul slot_unsigned_mul
 
 lemma mul_sanity: "(x :: u64) = 2 ^ 63 - 1 \<Longrightarrow> y = 2 \<Longrightarrow> run (x .* y) \<noteq> \<top>"
   by (clarsimp simp: word_unsigned_mul_def run_def Let_unfold return_def)
@@ -172,7 +172,7 @@ definition slot_unsigned_div :: "Slot \<Rightarrow> Slot \<Rightarrow> (Slot, 'a
   }"
 
 adhoc_overloading
-  unsigned_div word_unsigned_div slot_unsigned_div
+  unsigned_div == word_unsigned_div slot_unsigned_div
 
 
 definition word_unsigned_mod :: "('w :: len) word \<Rightarrow> 'w word \<Rightarrow> ('w word, 'a) cont" where
@@ -188,7 +188,7 @@ definition epoch_unsigned_mod :: "Epoch \<Rightarrow> Epoch \<Rightarrow> (Epoch
 
 
 adhoc_overloading
-  unsigned_mod word_unsigned_mod epoch_unsigned_mod
+  unsigned_mod == word_unsigned_mod epoch_unsigned_mod
 
 lemma udiv_sanity: "run ((x :: u64) \\ 2) \<noteq> \<top>"
   by (clarsimp simp: word_unsigned_div_def run_def Let_unfold return_def)
@@ -215,7 +215,7 @@ definition epoch_unsigned_sub :: "Epoch \<Rightarrow> Epoch \<Rightarrow> (Epoch
 
 (* TODO(michael) : more epoch ops *)
 adhoc_overloading
-  unsigned_sub word_unsigned_sub slot_unsigned_sub epoch_unsigned_sub
+  unsigned_sub == word_unsigned_sub slot_unsigned_sub epoch_unsigned_sub
 
 lemma sub_sanity: "(x :: u64) > 1 \<Longrightarrow> run (x .- 1) \<noteq> \<top>"
   apply (clarsimp simp: word_unsigned_sub_def run_def Let_unfold return_def fail_def)

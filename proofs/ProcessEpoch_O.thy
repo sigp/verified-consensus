@@ -950,7 +950,7 @@ definition ref_unsigned_add_r :: "(u64, 'b) ref \<Rightarrow> u64 \<Rightarrow> 
   where  "ref_unsigned_add_r x y \<equiv> do {(x' :: u64) <- read_beacon x;  x' .+ y}" 
 
 adhoc_overloading
-  unsigned_add ref_unsigned_add ref_unsigned_add_l ref_unsigned_add_r
+  unsigned_add == ref_unsigned_add ref_unsigned_add_l ref_unsigned_add_r
 
 
 definition process_single_reward_and_penalty :: 

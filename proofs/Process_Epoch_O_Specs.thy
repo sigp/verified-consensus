@@ -3746,14 +3746,6 @@ lemma get_eligible_validator_indices[wp]: "(\<And>x. hoare_triple (lift (P x)) (
   apply (sep_mp)
   by (simp add: less_eq_Epoch_def one_Epoch_def plus_Epoch_def)
 
-(* we claim these programs are 'obviously' the same *)
-
-term get_flag_index_deltas
-
-
-
-
-
 lemma ref_read_index: "(do {v <- read validators; (var_list_index v index)}) \<le> (do {v <- mut (var_list_index_lens validators index);  read v})"
   apply (rule le_funI)
   apply (clarsimp simp: read_beacon_def getState_def bindCont_def var_list_index_lens_def lens_ocomp_def)
@@ -4550,7 +4542,6 @@ lemma decrease_balance_ref:
      apply (clarsimp simp: var_list_update_def return_def test_restricts_Nondet write_beacon_def getState_def bindCont_def )
     apply (case_tac y; clarsimp)
     apply (unat_arith; clarsimp simp: unat_of_nat64')
-  apply (simp add: of_nat_diff)
     apply (rule seq_mono; clarsimp)
    apply (case_tac y; clarsimp)
    apply (rule_tac i="(a,b)" in SUP_upper2; clarsimp)
