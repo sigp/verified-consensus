@@ -13,7 +13,7 @@ There is a complete description of the algorithm with sketches of the proofs her
 The algorithm description is designed to be consumed by client implementers and
 researchers, and mirrors the spec by implementing the algorithm in Python.
 
-We are now in the process of formalising the proofs in Isabelle/HOL:
+We have formalised the following proofs in Isabelle/HOL:
 
 - [`Word_Lib`](./Word_Lib): Library for machine words. 
 - [`algebra`](./algebra): Rely-guarantee algebra and trace model instantantiation, the former gives the semantic meaning to our verification and the latter is simply a instance for consistency checking.
@@ -32,6 +32,8 @@ We are now in the process of formalising the proofs in Isabelle/HOL:
 - [`ProcessEpoch.thy`](./ProcessEpoch.thy): Translation of the Python spec to our continuation monad.
 - [`ProcessEpoch_O.thy`](./ProcessEpoch_O.thy): Translation of the optimised spec to our continuation monad.
 - [`Process_Epoch_O_Specs.thy`](./Process_Epoch_O_Specs.thy): Proofs of functional correctness of the python and optimised specifications
+
+To build all the proofs, run `isabelle build -v -D Word_Lib/ -d . -d proofs Verified_Consensus_Proofs`. Proofs were last checked to run on Isabelle2025. 
 
 ## Call DB
 
