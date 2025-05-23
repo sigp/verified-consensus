@@ -18,22 +18,26 @@ We have formalised the following proofs in Isabelle/HOL:
 - [`Word_Lib`](./Word_Lib): Library for machine words. 
 - [`algebra`](./algebra): Rely-guarantee algebra and trace model instantantiation, the former gives the semantic meaning to our verification and the latter is simply a instance for consistency checking.
 - [`jormungand`](./jormungand): Separation Logic algebra and mechanisation, including proof tactics. Adapted from previous work by the authors.
-- [`Cont_Monad_Algebra.thy`](./Cont_Monad_Algebra.thy): Formalisation of the continuation monad with some added syntactic sugar for imperative state updates.
-- [`Lens.thy`](./Lens.thy): Formalisation of lenses, used for representation of the state and abstract model for separation algebra.
-- [`Fun_Algebra.thy`](./Fun_Algebra.thy): Generic separation algebra based on pointed sets of endofunctions. 
-- [`Sep_Logic_Incomplete.thy`](./Sep_Logic_Incomplete.thy): Contains as assumptions aspects of the formalisation due to be mechanised fully at a later date. 
-- [`Hoare_Logic.thy`](./Hoare_Logic.thy): Formalisation of Hoare Logic as inequalities in the rely-guarantee algebra.
-- [`Hoare_VCG.thy`](./Hoare_VCG.thy): Hoare triples for generic program constructs. 
-- [`Types.thy`](./Types.thy): Choice of representation types for the Python spec.
-- [`Unsigned.thy`](./Unsigned.thy): Formalisation of all unsigned operations on machine words/epochs etc. 
-- [`Config.thy`](./Config.thy): Abstract model of all possible configuration options for Epoch Processing
-- [`VerifiedConsensus.thy`](./VerifiedConsensus.thy): Brings together the formalisation of python with our algebra. 
-- [`sqrt_proof.thy`](./sqrt_proof.thy): Proof of correctness of the integer square root algorithm used in the Python spec.
-- [`ProcessEpoch.thy`](./ProcessEpoch.thy): Translation of the Python spec to our continuation monad.
-- [`ProcessEpoch_O.thy`](./ProcessEpoch_O.thy): Translation of the optimised spec to our continuation monad.
-- [`Process_Epoch_O_Specs.thy`](./Process_Epoch_O_Specs.thy): Proofs of functional correctness of the python and optimised specifications
+- [`Cont_Monad_Algebra.thy`](./proofs/Cont_Monad_Algebra.thy): Formalisation of the continuation monad with some added syntactic sugar for imperative state updates.
+- [`Lens.thy`](./proofs/Lens.thy): Formalisation of lenses, used for representation of the state and abstract model for separation algebra.
+- [`Fun_Algebra.thy`](./proofs/Fun_Algebra.thy): Generic separation algebra based on pointed sets of endofunctions. 
+- [`Sep_Logic_Incomplete.thy`](./proofs/Sep_Logic_Incomplete.thy): Contains as assumptions aspects of the formalisation due to be mechanised fully at a later date. 
+- [`Hoare_Logic.thy`](./proofs/Hoare_Logic.thy): Formalisation of Hoare Logic as inequalities in the rely-guarantee algebra.
+- [`Hoare_VCG.thy`](./proofs/Hoare_VCG.thy): Hoare triples for generic program constructs. 
+- [`Types.thy`](./proofs/Types.thy): Choice of representation types for the Python spec.
+- [`Unsigned.thy`](./proofs/Unsigned.thy): Formalisation of all unsigned operations on machine words/epochs etc. 
+- [`Config.thy`](./proofs/Config.thy): Abstract model of all possible configuration options for Epoch Processing
+- [`VerifiedConsensus.thy`](./proofs/VerifiedConsensus.thy): Brings together the formalisation of python with our algebra. 
+- [`sqrt_proof.thy`](./proofs/sqrt_proof.thy): Proof of correctness of the integer square root algorithm used in the Python spec.
+- [`ProcessEpoch.thy`](./proofs/ProcessEpoch.thy): Translation of the Python spec to our continuation monad.
+- [`ProcessEpoch_O.thy`](./proofs/ProcessEpoch_O.thy): Translation of the optimised spec to our continuation monad.
+- [`Process_Epoch_O_Specs.thy`](./proofs/Process_Epoch_O_Specs.thy): Proofs of functional correctness of the python and optimised specifications
+
+Interactive exploration can begin with `VerifiedConsensus.thy`. 
 
 To build all the proofs, run `isabelle build -v -D Word_Lib/ -d . -d proofs Verified_Consensus_Proofs`. Proofs were last checked to run on Isabelle2025. 
+
+The remaining mechanisation gap is primarily based around the missing data refinement between the augmented state (including caches) and the beacon state. For more details, see the [report](./docs/report.md). 
 
 ## Call DB
 
